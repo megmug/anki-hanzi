@@ -6,10 +6,12 @@ Learn, read, write and practice Mandarin by drawing strokes in [Anki Desktop](ht
 
 <img src="https://raw.githubusercontent.com/krmanik/Anki-xiehanzi/main/static/img/xiehanzi_v2.0.gif" height="450px"></img>
 
+# New HSK (2025-11)
+
 # Quick Start
 Download HSK Anki apkg file for [Anki Desktop](https://apps.ankiweb.net/), [AnkiDroid](https://play.google.com/store/apps/details?id=com.ichi2.anki) or [AnkiMobile](https://apps.apple.com/us/app/ankimobile-flashcards/id373493387)
 
-[Download Anki Deck](https://ankiweb.net/shared/info/1351435439)
+<!-- [Download Anki Deck](https://ankiweb.net/shared/info/1351435439) -->
 
 **Before importing Anki Deck please make backups with scheduling information.**
 
@@ -30,6 +32,16 @@ Download HSK Anki apkg file for [Anki Desktop](https://apps.ankiweb.net/), [Anki
 - Indicator at bottom for showing if character loaded or not (```green - loaded, red - not loaded or some error```)
 
 Note: Some changes will get reflect from next card.
+
+
+
+
+
+
+
+<br/><br/>
+
+# 2021-03
 
 ## There are five types of Anki-xiehanzi deck.
 
