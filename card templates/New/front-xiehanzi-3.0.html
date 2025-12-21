@@ -379,20 +379,20 @@
                 divElem.style.display = e.checked ? "block" : "none";
                 applyToggleEffect(e.id, e.checked);
             }
-            
+
             // Update sentence visibility when relevant preferences change
             if (["text-sim", "text-trad", "text-pinyin", "text-meaning"].includes(e.id)) {
                 updateSentenceVisibility();
             }
         }
     }
-    
+
     function updateSentenceVisibility() {
         var showSim = Persistence.getItem(frontBack + "text-sim") !== "false";
         var showTrad = Persistence.getItem(frontBack + "text-trad") !== "false";
         var showPinyin = Persistence.getItem(frontBack + "text-pinyin") !== "false";
         var showMeaning = Persistence.getItem(frontBack + "text-meaning") !== "false";
-        
+
         document.querySelectorAll(".sen-sim").forEach(el => el.style.display = showSim ? "block" : "none");
         document.querySelectorAll(".sen-trad").forEach(el => el.style.display = showTrad ? "block" : "none");
         document.querySelectorAll(".sen-pin").forEach(el => el.style.display = showPinyin ? "block" : "none");
@@ -792,11 +792,7 @@
     <button id="loadMore">Load more</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
 <script>
-    var offset = 0;
-    var db = null;
-
     function getSentenceSettings() {
         return {
             limit: parseInt(Persistence.getItem(frontBack + "no-of-sentence") ||
@@ -825,68 +821,130 @@
         }
     }, 100);
 
+    var sentences = null;
+    var charIndex = null;
+    var offset = 0;
+    var cachedResults = [];
+    var lastQueryKey = null;
+
+    function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function buildCharIndex(data) {
+        const index = Object.create(null);
+        for (const s of data) {
+            if (!s.simplified) continue;
+            for (const ch of new Set(s.simplified)) {
+                (index[ch] ||= []).push(s);
+            }
+        }
+        return index;
+    }
+
+    function getQueryKey(char, settings) {
+        return [
+            char,
+            settings.level,
+            settings.length,
+            settings.limit,
+            settings.random ? 1 : 0
+        ].join("|");
+    }
+
     async function loadSentences() {
         try {
-            var SQL = await initSqlJs({
-                locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}`
-            });
+            const url = "_chinese_sentences.json";
 
-            var res = await fetch("_chinese_sentences.db");
-            db = new SQL.Database(new Uint8Array(await res.arrayBuffer()));
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("JSON fetch failed");
+
+            sentences = await res.json();
+            charIndex = buildCharIndex(sentences);
+
+            offset = 0;
+            cachedResults = [];
+            lastQueryKey = null;
+
             loadMore();
         } catch (err) {
-            console.error("Failed to load sentences:", err);
-            document.getElementById("char_sentence").style.display = "none";
+            console.log("Failed to load sentences:", err);
+            const el = document.getElementById("char_sentence");
+            if (el) el.style.display = "none";
         }
     }
 
-    async function loadMore() {
-        if (!db) return;
+    function loadMore() {
+        if (!sentences) return;
 
-        var settings = getSentenceSettings();
-        var char = "{{Simplified}}";
-        var sql = `SELECT * FROM sentences 
-                   WHERE simplified LIKE '%${char}%' 
-                   AND hsk_level <= ${settings.level} 
-                   AND LENGTH(simplified) < ${settings.length}
-                   ${settings.random ? 'ORDER BY RANDOM()' : 'ORDER BY id'}
-                   LIMIT ${settings.limit} OFFSET ${offset}`;
+        const settings = getSentenceSettings();
+        const char = "{{Simplified}}";
 
-        var result = db.exec(sql);
-        if (!result.length) {
-            document.getElementById("loadMore").disabled = true;
-            document.getElementById("loadMore").textContent = "No more sentences";
+        const queryKey = getQueryKey(char, settings);
+        if (queryKey !== lastQueryKey) {
+            lastQueryKey = queryKey;
+            offset = 0;
+
+            let pool = charIndex[char] || [];
+
+            cachedResults = pool.filter(s =>
+                s.simplified.includes(char) &&
+                s.hsk_level <= settings.level &&
+                s.simplified.length < settings.length
+            );
+
+            if (settings.random) {
+                shuffle(cachedResults);
+            } else {
+                cachedResults.sort((a, b) => a.id - b.id);
+            }
+        }
+
+        const page = cachedResults.slice(offset, offset + settings.limit);
+        if (!page.length) {
+            const btn = document.getElementById("loadMore");
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "No more sentences";
+            }
             return;
         }
 
-        var container = document.getElementById("sentences");
-        
-        var showSim = Persistence.getItem(frontBack + "text-sim") !== "false";
-        var showTrad = Persistence.getItem(frontBack + "text-trad") !== "false";
-        var showPinyin = Persistence.getItem(frontBack + "text-pinyin") !== "false";
-        var showMeaning = Persistence.getItem(frontBack + "text-meaning") !== "false";
-        
-        result[0].values.forEach(row => {
-            var [id, simplified, traditional, pinyin, translation] = row;
-            var sentenceHTML = simplified;
-            var pinyinHTML = pinyin;
+        const container = document.getElementById("sentences");
+        const showSim = Persistence.getItem(frontBack + "text-sim") !== "false";
+        const showTrad = Persistence.getItem(frontBack + "text-trad") !== "false";
+        const showPinyin = Persistence.getItem(frontBack + "text-pinyin") !== "false";
+        const showMeaning = Persistence.getItem(frontBack + "text-meaning") !== "false";
+
+        page.forEach(s => {
+            let sentenceHTML = s.simplified;
+            let pinyinHTML = s.pinyin;
 
             if (settings.colored) {
-                var [pinyinElem, coloredSimp] = getColoredHanziHTML(pinyin, simplified);
-                pinyinHTML = pinyinElem.innerHTML;
-                sentenceHTML = coloredSimp;
+                const [pinyinElem, colored] = getColoredHanziHTML(s.pinyin, s.simplified);
+                pinyinHTML = pinyinElem.outerHTML;
+                sentenceHTML = colored;
             }
 
-            sentenceHTML = sentenceHTML.replace(new RegExp(char, 'g'), `<b>${char}</b>`);
+            sentenceHTML = sentenceHTML.replace(
+                new RegExp(char, "g"),
+                `<b>${char}</b>`
+            );
 
-            var div = document.createElement("div");
+            const div = document.createElement("div");
             div.className = "sentence";
-            div.innerHTML = `<div class="sen-card">
-                <div class="sen-sim" style="display: ${showSim ? 'block' : 'none'}">${sentenceHTML}</div>
-                <div class="sen-trad" style="display: ${showTrad ? 'block' : 'none'}">${traditional}</div>
-                <div class="sen-pin" style="display: ${showPinyin ? 'block' : 'none'}">${pinyinHTML}</div>
-                <div class="sen-eng" style="display: ${showMeaning ? 'block' : 'none'}">${translation}</div>
-            </div>`;
+            div.innerHTML = `
+      <div class="sen-card">
+        <div class="sen-sim" style="display:${showSim ? "block" : "none"}">${sentenceHTML}</div>
+        <div class="sen-trad" style="display:${showTrad ? "block" : "none"}">${s.traditional}</div>
+        <div class="sen-pin" style="display:${showPinyin ? "block" : "none"}">${pinyinHTML}</div>
+        <div class="sen-eng" style="display:${showMeaning ? "block" : "none"}">${s.english}</div>
+      </div>
+    `;
             container.appendChild(div);
         });
 
