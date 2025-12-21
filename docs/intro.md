@@ -25,22 +25,11 @@ View full features [here](features.md).
 
 ## Quick Start
 
-Download `New HSK 3.0 Mandarin Chinese Deck` for Anki Desktop, AnkiDroid and AnkiMobile.
+Download `New HSK 3.0 (2025) Mandarin Chinese Deck` for Anki Desktop, AnkiDroid and AnkiMobile.
 
-<div className={styles.buttons}>
-    <Link
-    className="button button--primary button--md margin--sm"
-    to="https://ankiweb.net/shared/info/239300382">
-    Download from Ankiweb
-    </Link>
-</div>
+- [Anki-xiehanzi - New HSK (2025).apkg](https://github.com/krmanik/Anki-xiehanzi/releases/download/v2.3/Anki-xiehanzi.-.New.HSK.2025.apkg)
+- [Anki-xiehanzi - New HSK (2025) with sentences.apkg](https://github.com/krmanik/Anki-xiehanzi/releases/download/v2.3/Anki-xiehanzi.-.New.HSK.2025.with.sentences.apkg)
 
-<div className={styles.buttons}>
-    <Link
-    className="button button--primary button--md margin--sm"
-    to="https://github.com/krmanik/Anki-xiehanzi/releases">
-    Download from GitHub
-    </Link>
-</div>
+> **Note:** Before importing Anki Deck please make backups with scheduling information.
 
 For version 1 HSK 3.0 or HSK 2.0, view [this page](gettings-started/download.md).
