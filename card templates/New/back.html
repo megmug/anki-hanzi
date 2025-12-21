@@ -368,20 +368,41 @@
 </script>
 
 <script>
-    function getColoredHanziHTML(pinyin, simplified) {
-        var pinyin = colorizedHTMLElementFromString(pinyin, null, ["text-color5", "text-color1", "text-color2", "text-color3", "text-color4"])
-        var spans = pinyin.querySelectorAll('[class^="text-color"]');
+    function getColoredHanziHTML(pinyinText, simplified) {
+        var pinyinElem = colorizedHTMLElementFromString(
+            pinyinText,
+            null,
+            ["text-color5", "text-color1", "text-color2", "text-color3", "text-color4"]
+        );
 
-        var colorList = Array.from(spans).map((span, i) => {
-            var hanziChar = simplified[i] || "";
-            var newSpan = span.cloneNode(true);
-            newSpan.textContent = hanziChar;
-            return newSpan.outerHTML;
-        });
+        var spans = Array.from(pinyinElem.querySelectorAll('[class^="text-color"]'));
 
-        var html = `<span>${colorList.join("")}</span>`;
+        function isHanzi(ch) {
+            return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(ch);
+        }
 
-        return [pinyin, html];
+        var spanIndex = 0;
+        var out = "";
+
+        for (var i = 0; i < simplified.length; i++) {
+            var ch = simplified[i];
+
+            if (!isHanzi(ch)) {
+                out += ch;
+                continue;
+            }
+
+            if (spanIndex < spans.length) {
+                var span = spans[spanIndex++];
+                var cls = span.getAttribute("class") || "";
+                out += '<span class="' + cls + '">' + ch + "</span>";
+            } else {
+                out += ch;
+            }
+        }
+
+        var html = '<span>' + out + "</span>";
+        return [pinyinElem, html];
     }
 </script>
 
@@ -401,7 +422,7 @@
             limit: parseInt(Persistence.getItem(frontBack + "no-of-sentence") ||
                 document.getElementById("no-of-sentence")?.value) || 5,
             level: parseInt(Persistence.getItem(frontBack + "level-of-sentence") ||
-                document.getElementById("level-of-sentence")?.value) || 3,
+                document.getElementById("level-of-sentence")?.value) || 9,
             length: parseInt(Persistence.getItem(frontBack + "length-of-sentence") ||
                 document.getElementById("length-of-sentence")?.value) || 10,
             random: Persistence.getItem(frontBack + "text-sentence-random") !== "false" &&
@@ -425,129 +446,164 @@
     }, 100);
 
     var sentences = null;
-    var charIndex = null;
-    var offset = 0;
+    var indexByChar = null;
     var cachedResults = [];
-    var lastQueryKey = null;
+    var lastQueryKey = "";
+    var offset = 0;
+    var isLoading = false;
 
-    function shuffle(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
+    function shuffle(array) {
+        for (var i = array.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = array[i];
+            array[i] = array[j];
+            array[j] = tmp;
         }
-        return arr;
+        return array;
     }
 
     function buildCharIndex(data) {
-        const index = Object.create(null);
-        for (const s of data) {
-            if (!s.simplified) continue;
-            for (const ch of new Set(s.simplified)) {
-                (index[ch] ||= []).push(s);
-            }
+        var index = Object.create(null);
+
+        for (var i = 0; i < data.length; i++) {
+            var sentence = data[i];
+            if (!sentence.simplified) continue;
+
+            var uniqueChars = new Set(sentence.simplified);
+            uniqueChars.forEach(function (ch) {
+                if (!index[ch]) index[ch] = [];
+                index[ch].push(sentence);
+            });
         }
         return index;
     }
 
-    function getQueryKey(char, settings) {
-        return [
-            char,
-            settings.level,
-            settings.length,
-            settings.limit,
-            settings.random ? 1 : 0
-        ].join("|");
+    function makeQueryKey(char, settings) {
+        return (
+            char + "|" +
+            settings.level + "|" +
+            settings.length + "|" +
+            settings.limit + "|" +
+            (settings.random ? 1 : 0)
+        );
+    }
+
+    function escapeRegex(text) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
     async function loadSentences() {
+        if (sentences && indexByChar) {
+            loadMore();
+            return;
+        }
+
+        if (isLoading) return;
+        isLoading = true;
+
         try {
-            const url = "_chinese_sentences.json";
+            var response = await fetch("_chinese_sentences.json", { cache: "no-store" });
+            if (!response.ok) throw new Error("Failed to load JSON");
 
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("JSON fetch failed");
+            sentences = await response.json();
+            indexByChar = buildCharIndex(sentences);
 
-            sentences = await res.json();
-            charIndex = buildCharIndex(sentences);
-
-            offset = 0;
             cachedResults = [];
-            lastQueryKey = null;
+            lastQueryKey = "";
+            offset = 0;
 
             loadMore();
-        } catch (err) {
-            console.log("Failed to load sentences:", err);
-            const el = document.getElementById("char_sentence");
-            if (el) el.style.display = "none";
+        } catch (error) {
+            console.log("Failed to load sentences:", error);
+            var container = document.getElementById("char_sentence");
+            if (container) container.style.display = "none";
+        } finally {
+            isLoading = false;
         }
     }
 
     function loadMore() {
-        if (!sentences) return;
+        if (!sentences || !indexByChar) return;
 
-        const settings = getSentenceSettings();
-        const char = "{{Simplified}}";
+        var settings = getSentenceSettings();
+        var searchText = "{{Simplified}}";
 
-        const queryKey = getQueryKey(char, settings);
+        var queryKey = makeQueryKey(searchText, settings);
+
         if (queryKey !== lastQueryKey) {
             lastQueryKey = queryKey;
             offset = 0;
 
-            let pool = charIndex[char] || [];
+            var pool;
+            if (searchText.length === 1) {
+                pool = indexByChar[searchText] || [];
+            } else {
+                pool = sentences;
+            }
 
-            cachedResults = pool.filter(s =>
-                s.simplified.includes(char) &&
-                s.hsk_level <= settings.level &&
-                s.simplified.length < settings.length
-            );
+            cachedResults = pool.filter(function (s) {
+                return (
+                    s.simplified &&
+                    s.simplified.includes(searchText) &&
+                    s.hsk_level <= settings.level &&
+                    s.simplified.length < settings.length
+                );
+            });
 
             if (settings.random) {
                 shuffle(cachedResults);
             } else {
-                cachedResults.sort((a, b) => a.id - b.id);
+                cachedResults.sort(function (a, b) {
+                    return a.id - b.id;
+                });
             }
         }
 
-        const page = cachedResults.slice(offset, offset + settings.limit);
+        var page = cachedResults.slice(offset, offset + settings.limit);
         if (!page.length) {
-            const btn = document.getElementById("loadMore");
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = "No more sentences";
+            var loadMoreBtn = document.getElementById("loadMore");
+            if (loadMoreBtn) {
+                loadMoreBtn.disabled = true;
+                loadMoreBtn.textContent = "No more sentences";
             }
             return;
         }
 
-        const container = document.getElementById("sentences");
-        const showSim = Persistence.getItem(frontBack + "text-sim") !== "false";
-        const showTrad = Persistence.getItem(frontBack + "text-trad") !== "false";
-        const showPinyin = Persistence.getItem(frontBack + "text-pinyin") !== "false";
-        const showMeaning = Persistence.getItem(frontBack + "text-meaning") !== "false";
+        var container = document.getElementById("sentences");
+        if (!container) return;
 
-        page.forEach(s => {
-            let sentenceHTML = s.simplified;
-            let pinyinHTML = s.pinyin;
+        var showSimplified = Persistence.getItem(frontBack + "text-sim") !== "false";
+        var showTraditional = Persistence.getItem(frontBack + "text-trad") !== "false";
+        var showPinyin = Persistence.getItem(frontBack + "text-pinyin") !== "false";
+        var showMeaning = Persistence.getItem(frontBack + "text-meaning") !== "false";
 
-            if (settings.colored) {
-                const [pinyinElem, colored] = getColoredHanziHTML(s.pinyin, s.simplified);
-                pinyinHTML = pinyinElem.outerHTML;
-                sentenceHTML = colored;
+        var highlightRegex = new RegExp(escapeRegex(searchText), "g");
+
+        page.forEach(function (s) {
+            var simplifiedHTML = s.simplified || "";
+            var pinyinHTML = s.pinyin || "";
+
+            if (settings.colored && s.simplified && s.pinyin) {
+                var colored = getColoredHanziHTML(s.pinyin, s.simplified);
+                pinyinHTML = colored[0].innerHTML;
+                simplifiedHTML = colored[1];
             }
 
-            sentenceHTML = sentenceHTML.replace(
-                new RegExp(char, "g"),
-                `<b>${char}</b>`
+            simplifiedHTML = simplifiedHTML.replace(
+                highlightRegex,
+                "<b>" + searchText + "</b>"
             );
 
-            const div = document.createElement("div");
+            var div = document.createElement("div");
             div.className = "sentence";
-            div.innerHTML = `
-      <div class="sen-card">
-        <div class="sen-sim" style="display:${showSim ? "block" : "none"}">${sentenceHTML}</div>
-        <div class="sen-trad" style="display:${showTrad ? "block" : "none"}">${s.traditional}</div>
-        <div class="sen-pin" style="display:${showPinyin ? "block" : "none"}">${pinyinHTML}</div>
-        <div class="sen-eng" style="display:${showMeaning ? "block" : "none"}">${s.english}</div>
-      </div>
-    `;
+            div.innerHTML =
+                '<div class="sen-card">' +
+                '<div class="sen-sim" style="display:' + (showSimplified ? "block" : "none") + '">' + simplifiedHTML + "</div>" +
+                '<div class="sen-trad" style="display:' + (showTraditional ? "block" : "none") + '">' + (s.traditional || "") + "</div>" +
+                '<div class="sen-pin" style="display:' + (showPinyin ? "block" : "none") + '">' + pinyinHTML + "</div>" +
+                '<div class="sen-eng" style="display:' + (showMeaning ? "block" : "none") + '">' + (s.english || "") + "</div>" +
+                "</div>";
+
             container.appendChild(div);
         });
 
