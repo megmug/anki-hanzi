@@ -333,10 +333,16 @@
     function showTraditionalChar() {
         var tradChar = document.getElementById("char_trad");
         var simChar = document.getElementById("char_sim");
-        var isSame = tradChar.innerHTML === simChar.innerHTML;
-        var showTrad = Persistence.getItem(frontBack + "text-trad") === "true";
-        var showSim = Persistence.getItem(frontBack + "text-sim") === "true";
-        tradChar.style.display = isSame ? (showSim ? "none" : "block") : (showTrad ? "block" : "none");
+        var tradPer = Persistence
+        if (tradChar.innerHTML != simChar.innerHTML) {
+            if (Persistence.getItem(frontBack + "text-trad") == "true") {
+                tradChar.style.display = "block";
+            }
+        } else {
+            if (Persistence.getItem(frontBack + "text-sim") == "true") {
+                tradChar.style.display = "none";
+            }
+        }
     }
 
     function initDrawPrefs() {
@@ -986,6 +992,10 @@
                 var colored = getColoredHanziHTML(s.pinyin, s.simplified);
                 pinyinHTML = colored[0].innerHTML;
                 simplifiedHTML = colored[1];
+            }
+
+            if (frontBack == "front") {
+                searchText = "__"
             }
 
             simplifiedHTML = simplifiedHTML.replace(

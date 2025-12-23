@@ -283,7 +283,6 @@
     function showTraditionalChar() {
         var tradChar = document.getElementById("char_trad");
         var simChar = document.getElementById("char_sim");
-        var tradPer = Persistence
         if (tradChar.innerHTML != simChar.innerHTML) {
             if (Persistence.getItem(frontBack + "text-trad") == "true") {
                 tradChar.style.display = "block";
