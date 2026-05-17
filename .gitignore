@@ -20,6 +20,8 @@ yarn-debug.log*
 yarn-error.log*
 
 .yarn-cache
+extra_audio/
+custom_generate_xiehanzi_report.json
 
 .backup
 .config
