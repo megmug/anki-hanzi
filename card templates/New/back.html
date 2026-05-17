@@ -45,23 +45,58 @@
 
     var frontBack = "back";
     var switchIdList = ["text-pinyin", "text-zhuyin", "text-meaning", "text-sim", "text-trad"];
+    var displayDefaultPrefs = {
+        "backtext-pinyin": "true",
+        "backtext-zhuyin": "false",
+        "backtext-meaning": "true",
+        "backtext-sim": "true",
+        "backtext-trad": "false"
+    };
+    var displayDefaultPrefsMarker = "xiehanzi-display-defaults-v2";
     var numberInputList = ["no-of-sentence", "length-of-sentence", "level-of-sentence"];
     var sentenceCheckboxList = ["text-sentence", "text-sentence-random", "text-sentence-colored"];
 
+    function initDisplayDefaultPrefs() {
+        if (!(window.Persistence && Persistence.isAvailable())) {
+            return;
+        }
+        if (Persistence.getItem(displayDefaultPrefsMarker) == "true") {
+            return;
+        }
+        for (var perId in displayDefaultPrefs) {
+            if (Object.prototype.hasOwnProperty.call(displayDefaultPrefs, perId)) {
+                Persistence.setItem(perId, displayDefaultPrefs[perId]);
+            }
+        }
+        Persistence.setItem(displayDefaultPrefsMarker, "true");
+    }
+
+    function getDisplayPref(perId) {
+        var stored = Persistence.getItem(perId);
+        if (stored === undefined || stored === null) {
+            stored = Object.prototype.hasOwnProperty.call(displayDefaultPrefs, perId)
+                ? displayDefaultPrefs[perId]
+                : "true";
+            Persistence.setItem(perId, stored);
+        }
+        return stored;
+    }
+
     function initSwitchPrefs() {
+        initDisplayDefaultPrefs();
         // Initialize display switches
         switchIdList.forEach(_id => {
             var perId = frontBack + _id;
             var divId = _id.replace("text-", "char_");
             var elem = document.getElementById(_id);
             var divElem = document.getElementById(divId);
+            var stored = getDisplayPref(perId);
 
-            if (Persistence.getItem(perId) == "false") {
+            if (stored == "false") {
                 elem.checked = false;
                 divElem.style.display = "none";
             } else {
                 elem.checked = true;
-                Persistence.setItem(perId, "true");
                 divElem.style.display = "block";
             }
 

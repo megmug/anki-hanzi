@@ -54,10 +54,46 @@ if(void 0===window.Persistence){var e="github.com/SimonLammer/anki-persistence/"
 
 <script>
     var switchIdList = ["text-pinyin", "text-zhuyin"];
+    var displayDefaultPrefs = {
+        "backtext-pinyin": "true",
+        "backtext-zhuyin": "false",
+        "backtext-meaning": "true",
+        "backtext-sim": "true",
+        "backtext-trad": "false"
+    };
+    var displayDefaultPrefsMarker = "xiehanzi-display-defaults-v2";
+
+    function initDisplayDefaultPrefs() {
+        if (!(window.Persistence && Persistence.isAvailable())) {
+            return;
+        }
+        if (Persistence.getItem(displayDefaultPrefsMarker) == "true") {
+            return;
+        }
+        for (var perId in displayDefaultPrefs) {
+            if (Object.prototype.hasOwnProperty.call(displayDefaultPrefs, perId)) {
+                Persistence.setItem(perId, displayDefaultPrefs[perId]);
+            }
+        }
+        Persistence.setItem(displayDefaultPrefsMarker, "true");
+    }
+
+    function getDisplayPref(perId) {
+        var stored = Persistence.getItem(perId);
+        if (stored == undefined || stored == null) {
+            stored = Object.prototype.hasOwnProperty.call(displayDefaultPrefs, perId)
+                ? displayDefaultPrefs[perId]
+                : "true";
+            Persistence.setItem(perId, stored);
+        }
+        return stored;
+    }
+
     function initSwitchPrefs() {
+        initDisplayDefaultPrefs();
         for (var _id of switchIdList) {
             var divId = _id.replace("text-", "char_");
-            if (Persistence.getItem("back" + _id) == "false") {
+            if (getDisplayPref("back" + _id) == "false") {
                 document.getElementById(divId).style.display = "none";
                 if (_id == "text-pinyin") {
                     showHide(".pinyin", false);

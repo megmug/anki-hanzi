@@ -259,9 +259,41 @@
 
 <script>
     var switchIdList = ["text-grid", "text-pinyin", "text-meaning", "text-sim", "text-trad", "text-stroke-color", "text-outline"];
+    var switchDefaultPrefs = {
+        "fronttext-grid": "true",
+        "fronttext-pinyin": "true",
+        "fronttext-meaning": "true",
+        "fronttext-sim": "false",
+        "fronttext-trad": "false",
+        "fronttext-stroke-color": "true",
+        "fronttext-outline": "false",
+        "backtext-grid": "true",
+        "backtext-pinyin": "true",
+        "backtext-meaning": "true",
+        "backtext-sim": "true",
+        "backtext-trad": "false",
+        "backtext-stroke-color": "true",
+        "backtext-outline": "false"
+    };
+    var switchDefaultPrefsMarker = "xiehanzi-write-defaults-v2";
     var numberInputList = ["draw-size", "stroke-size", "hint-miss", "no-of-sentence", "level-of-sentence", "length-of-sentence"];
     var sentenceCheckboxList = ["text-sentence", "text-sentence-random", "text-sentence-colored"];
     var frontBack = "front";
+
+    function initDefaultSwitchPrefs() {
+        if (!(window.Persistence && Persistence.isAvailable())) {
+            return;
+        }
+        if (Persistence.getItem(switchDefaultPrefsMarker) == "true") {
+            return;
+        }
+        for (var perId in switchDefaultPrefs) {
+            if (Object.prototype.hasOwnProperty.call(switchDefaultPrefs, perId)) {
+                Persistence.setItem(perId, switchDefaultPrefs[perId]);
+            }
+        }
+        Persistence.setItem(switchDefaultPrefsMarker, "true");
+    }
 
     function setActive(side) {
         frontBack = side === "text-front" ? "front" : "back";
@@ -277,6 +309,7 @@
         initSwitchPrefs();
     }
 
+    initDefaultSwitchPrefs();
     setActive(document.getElementById("back") ? "text-back" : "text-front");
 
     function initPractice() {
@@ -294,9 +327,16 @@
             var elem = document.getElementById(_id);
             var divId = _id.replace("text-", "char_");
             var divElem = document.getElementById(divId);
+            var stored = Persistence.getItem(perId);
 
-            elem.checked = Persistence.getItem(perId) !== "false";
-            Persistence.setItem(perId, elem.checked.toString());
+            if (stored === undefined || stored === null) {
+                stored = Object.prototype.hasOwnProperty.call(switchDefaultPrefs, perId)
+                    ? switchDefaultPrefs[perId]
+                    : "true";
+                Persistence.setItem(perId, stored);
+            }
+
+            elem.checked = stored !== "false";
 
             if (divElem && !drawIds.includes(_id)) {
                 divElem.style.display = elem.checked ? "block" : "none";
