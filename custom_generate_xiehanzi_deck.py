@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Build a customized xiehanzi APKG from the prepared New HSK (2025) word files.
 
