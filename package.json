@@ -29,7 +29,7 @@
     "custom-docusaurus-plugin": "file:plugins/custom-docusaurus-plugin",
     "file-loader": "^6.2.0",
     "genanki-js": "^2.0.0",
-    "hanzi-writer": "^3.6.1",
+    "hanzi-writer": "3.7.3",
     "jieba-wasm": "^2.0.0",
     "path-browserify": "^1.0.1",
     "postcss-normalize": "^10.0.1",

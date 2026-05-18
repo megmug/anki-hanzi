@@ -5561,10 +5561,10 @@ handle-thing@^2.0.0:
   resolved "https://registry.npmjs.org/handle-thing/-/handle-thing-2.0.1.tgz"
   integrity sha512-9Qn4yBxelxoh2Ow62nP+Ka/kMnOXRi8BXnRaUwezLNhqelnN49xKz4F/dPP8OYLxLxq6JDtZb2i9XznUQbNPTg==
 
-hanzi-writer@^3.6.1:
-  version "3.6.1"
-  resolved "https://registry.npmjs.org/hanzi-writer/-/hanzi-writer-3.6.1.tgz"
-  integrity sha512-8QHy1l+ggSYG7+Qvd3Sy5xSt/MLe514v31e5UR6YYnrcxd/hUcjdvavUlD68rTMilDZEoCddWLG7gl1ri3LSCA==
+hanzi-writer@3.7.3:
+  version "3.7.3"
+  resolved "https://registry.npmjs.org/hanzi-writer/-/hanzi-writer-3.7.3.tgz"
+  integrity sha512-fdOFrb1cXWL/pV/oplJkcdziCvjJzhhf+qoIBm5IpVGxPBZEu4eLB6ZG5RJDbKXyNbNlyx8oIpa3XrcUBcSXpg==
 
 has-flag@^3.0.0:
   version "3.0.0"
