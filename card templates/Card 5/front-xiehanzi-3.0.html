@@ -1,3 +1,7 @@
+<div class="header">Write the <span class="question-sub-text">character</span>.</div>
+
+<br>
+
 <div id="char_pinyin">{{Pinyin}}</div>
 <div id="char_sim" class="char-card">{{Simplified}}</div>
 <div id="char_trad" class="char-card">{{Traditional}}</div>
@@ -10,7 +14,7 @@
         </div>
         <div class="xh-score-row xh-score-suggestion-row">
             <span class="xh-score-label">Suggestion</span>
-            <span id="xh-score-suggestion">Hidden</span>
+            <span id="xh-score-suggestion">--</span>
         </div>
         <div class="xh-score-row">
             <span class="xh-score-label">Completed</span>
@@ -41,9 +45,6 @@
         <div class="icon">
             <i class="material-icons">gesture</i>
         </div>
-    </a>
-    <a class="btn" id='btnReloadQuiz'>
-        <div class="icon"><i class="material-icons">replay</i></div>
     </a>
     <a class="btn" id='btnGoNextCard'>
         <div class="icon"><i class="material-icons">navigate_next</i></div>
@@ -614,12 +615,6 @@
         }
     }
 
-    document.getElementById("btnReloadQuiz").onclick = function () {
-        doPractice(true);
-        generateHanziOnFinishQuiz("none");
-        showNextAndRevealBtn(true);
-    }
-
     function getQuizScoreSuggestion(score) {
         if (score >= 90) {
             return { label: "Easy", className: "xh-score-easy" };
@@ -647,8 +642,8 @@
             return;
         }
 
-        document.getElementById("xh-score-value").textContent = isRevealed ? state.score + " / 100" : "Hidden";
-        document.getElementById("xh-score-suggestion").textContent = isRevealed ? suggestion.label : "Hidden";
+        document.getElementById("xh-score-value").textContent = isRevealed ? state.score + " / 100" : "-- / 100";
+        document.getElementById("xh-score-suggestion").textContent = isRevealed ? suggestion.label : "--";
         document.getElementById("xh-score-strokes").textContent =
             isRevealed
                 ? state.correctStrokes + " / " + (state.totalStrokes ? state.totalStrokes : "-")
