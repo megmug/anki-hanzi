@@ -42,6 +42,8 @@ HSK_DATA_DIR = Path("HSK-3.0-words-list/New HSK (2025)/Anki xiehanzi")
 AUDIO_DIR = Path("HSK-3.0-words-list/New HSK (2025)/Audio")
 EXTRA_AUDIO_DIR = Path("extra_audio")
 EXTRA_WORDS_PATH = Path("extra_words.tsv")
+HANZI_WRITER_PACKAGE_JSON = Path("node_modules/hanzi-writer/package.json")
+HANZI_WRITER_BUNDLE = Path("node_modules/hanzi-writer/dist/hanzi-writer.min.js")
 VOICE = "zh-CN-XiaoxiaoNeural"
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
@@ -114,6 +116,46 @@ def stable_id(label: str) -> int:
 
 def read_text(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8")
+
+
+def read_hanzi_writer_package_version() -> str:
+    package_data = json.loads(HANZI_WRITER_PACKAGE_JSON.read_text(encoding="utf-8"))
+    return str(package_data["version"])
+
+
+def read_hanzi_writer_bundle() -> str:
+    version = read_hanzi_writer_package_version()
+    bundle = HANZI_WRITER_BUNDLE.read_text(encoding="utf-8").strip()
+    return "\n".join([
+        f"/*! Hanzi Writer v{version} injected from npm package */",
+        bundle,
+    ])
+
+
+def inject_hanzi_writer_bundle(template: str) -> str:
+    start_marker = "    /*! Hanzi Writer v"
+    script_start = template.find(start_marker)
+    if script_start < 0:
+        raise ValueError("Could not find embedded Hanzi Writer bundle start marker")
+
+    script_end_marker = "\n</script>"
+    script_end = template.find(script_end_marker, script_start)
+    if script_end < 0:
+        raise ValueError("Could not find embedded Hanzi Writer bundle end marker")
+
+    injected_bundle = read_hanzi_writer_bundle()
+    indented_bundle = "\n".join(
+        f"    {line}" if line else ""
+        for line in injected_bundle.splitlines()
+    )
+    return template[:script_start] + indented_bundle + template[script_end:]
+
+
+def read_template(card_type: str, path: str | Path) -> str:
+    template = read_text(path)
+    if card_type == "Write":
+        return inject_hanzi_writer_bundle(template)
+    return template
 
 
 def normalize_field(value: str) -> str:
@@ -223,7 +265,7 @@ def create_models() -> dict[str, genanki.Model]:
             templates=[
                 {
                     "name": f"Card 1 - {card_type}",
-                    "qfmt": read_text(front_path),
+                    "qfmt": read_template(card_type, front_path),
                     "afmt": read_text(back_path),
                 }
             ],
@@ -375,6 +417,8 @@ def main() -> None:
         "decks": len(decks),
         "audio_files_packaged": len(media_files) - len(STATIC_MEDIA),
         "audio_voice": VOICE,
+        "hanzi_writer_version": read_hanzi_writer_package_version(),
+        "hanzi_writer_bundle": str(HANZI_WRITER_BUNDLE),
         "generated_audio_files": generated_audio,
         "failed_audio_generation": failed_audio_generation,
         "removed_zero_length_audio_files": removed_zero_length_audio,
