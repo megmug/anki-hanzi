@@ -663,12 +663,114 @@ hr {
   border-bottom: 1px solid rgba(255, 255, 255, 0.3);
 }
 
+#xh-writer-practice-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  max-width: 100%;
+  margin: var(--space-xs) auto 0;
+}
+
+#xh-score-panel {
+  --xh-score-accent: var(--tone-1);
+  box-sizing: border-box;
+  order: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 0.75rem;
+  row-gap: 0.15rem;
+  width: min(400px, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--surface4);
+  border-left: 6px solid var(--xh-score-accent);
+  border-radius: 8px;
+  background: var(--surface3);
+  color: var(--text1);
+  text-align: left;
+}
+
+#xh-score-panel.xh-score-again {
+  --xh-score-accent: var(--tone-1);
+}
+
+#xh-score-panel.xh-score-hard {
+  --xh-score-accent: var(--tone-2);
+}
+
+#xh-score-panel.xh-score-good {
+  --xh-score-accent: var(--tone-3);
+}
+
+#xh-score-panel.xh-score-easy {
+  --xh-score-accent: var(--tone-4);
+}
+
+#xh-score-panel.xh-score-redacted {
+  --xh-score-accent: var(--surface4);
+}
+
+.xh-score-main {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  margin-bottom: 0;
+}
+
+.xh-score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding-top: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.xh-score-label {
+  color: var(--text2);
+  font-weight: 600;
+}
+
+#xh-score-value {
+  color: var(--xh-score-accent);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#xh-score-panel.xh-score-redacted #xh-score-value {
+  font-size: 1.15rem;
+}
+
+#xh-score-panel.xh-score-redacted .xh-score-result-row,
+#xh-score-panel.xh-score-redacted .xh-score-suggestion-row {
+  display: none;
+}
+
+#xh-score-suggestion {
+  color: var(--xh-score-accent);
+  font-weight: 700;
+}
+
 #character-target-div {
+  order: 1;
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+#character-target-div svg {
+  max-width: min(100%, calc(100vw - 2rem));
+  height: auto;
 }
 
 #character-target-div > div {
@@ -677,6 +779,12 @@ hr {
 
 #character-target-div > :first-child {
   display: block;
+}
+
+@media screen and (max-width: 360px) {
+  #xh-score-panel {
+    grid-template-columns: 1fr;
+  }
 }
 
 #onfinish-character-target-div::-webkit-scrollbar {

@@ -2,7 +2,31 @@
 <div id="char_sim" class="char-card">{{Simplified}}</div>
 <div id="char_trad" class="char-card">{{Traditional}}</div>
 <div id="onfinish-character-target-div" class="tappable"></div>
-<div id="character-target-div" class="tappable"></div>
+<div id="xh-writer-practice-wrap">
+    <div id="xh-score-panel" class="xh-score-redacted" aria-live="polite">
+        <div class="xh-score-main xh-score-result-row">
+            <span class="xh-score-label">Score</span>
+            <span id="xh-score-value">Hidden</span>
+        </div>
+        <div class="xh-score-row xh-score-suggestion-row">
+            <span class="xh-score-label">Suggestion</span>
+            <span id="xh-score-suggestion">Hidden</span>
+        </div>
+        <div class="xh-score-row">
+            <span class="xh-score-label">Completed</span>
+            <span id="xh-score-strokes">0</span>
+        </div>
+        <div class="xh-score-row">
+            <span class="xh-score-label">Mistakes</span>
+            <span id="xh-score-mistakes">0</span>
+        </div>
+        <div class="xh-score-row">
+            <span class="xh-score-label">Assists</span>
+            <span id="xh-score-assists">0</span>
+        </div>
+    </div>
+    <div id="character-target-div" class="tappable"></div>
+</div>
 <div id="ch_load_status" style="color:#ea2322; margin-top: -36px; display: none;">&#8226;</div>
 <div id='audio' style='display:none'>{{Audio}}</div>
 
@@ -154,7 +178,7 @@
                             misses</small></label>
                 </div>
                 <input class="tappable" name="hint-miss" id="hint-miss" aria-labelledby="hint-miss" type="number"
-                    value="3" min="1" max="10" oninput=setPrefs(this)>
+                    value="0" min="0" max="10" oninput=setPrefs(this)>
             </div>
         </fieldset>
     </section>
@@ -345,7 +369,7 @@
             if (store) {
                 elem.value = store;
             } else {
-                var value = _id == "draw-size" ? 400 : _id == "stroke-size" ? 64 : 5; 2
+                var value = _id == "draw-size" ? 400 : _id == "stroke-size" ? 64 : 0;
                 
                 elem.value = value;
                 Persistence.setItem(perId, value);
@@ -485,7 +509,12 @@
     var charHeight = charHW;
     var charWidth = charHW;
     var strokeWidth = document.getElementById("stroke-size").value;
-    var strokeAfterMisses = document.getElementById("hint-miss").value;
+    function getHintAfterMisses(value) {
+        var parsed = parseInt(value, 10);
+        return parsed > 0 ? parsed : false;
+    }
+
+    var strokeAfterMisses = getHintAfterMisses(document.getElementById("hint-miss").value);
 
     function btnTapAudio() {
         var audio = new Audio();
@@ -591,8 +620,158 @@
         showNextAndRevealBtn(true);
     }
 
+    function getQuizScoreSuggestion(score) {
+        if (score >= 90) {
+            return { label: "Easy", className: "xh-score-easy" };
+        }
+        if (score >= 75) {
+            return { label: "Good", className: "xh-score-good" };
+        }
+        if (score >= 60) {
+            return { label: "Hard", className: "xh-score-hard" };
+        }
+        return { label: "Again", className: "xh-score-again" };
+    }
+
+    function getQuizScoreStorageKey() {
+        return "xh-writer-score:" + characters + "::{{text:Pinyin}}";
+    }
+
+    function renderQuizScoreState(state) {
+        var suggestion = getQuizScoreSuggestion(state.score);
+        var panel = document.getElementById("xh-score-panel");
+        var isBack = !!document.getElementById("back");
+        var isRevealed = isBack || state.isComplete;
+
+        if (!panel) {
+            return;
+        }
+
+        document.getElementById("xh-score-value").textContent = isRevealed ? state.score + " / 100" : "Hidden";
+        document.getElementById("xh-score-suggestion").textContent = isRevealed ? suggestion.label : "Hidden";
+        document.getElementById("xh-score-strokes").textContent =
+            isRevealed
+                ? state.correctStrokes + " / " + (state.totalStrokes ? state.totalStrokes : "-")
+                : state.correctStrokes;
+        document.getElementById("xh-score-mistakes").textContent = state.mistakes;
+        document.getElementById("xh-score-assists").textContent = state.assists;
+
+        panel.classList.remove("xh-score-again", "xh-score-hard", "xh-score-good", "xh-score-easy", "xh-score-redacted");
+        if (isRevealed) {
+            panel.classList.add(suggestion.className);
+        } else {
+            panel.classList.add("xh-score-redacted");
+        }
+    }
+
+    function saveQuizScoreState(state) {
+        if (!(window.Persistence && Persistence.isAvailable())) {
+            return;
+        }
+        Persistence.setItem(getQuizScoreStorageKey(), JSON.stringify(state));
+    }
+
+    function loadQuizScoreState() {
+        if (!(window.Persistence && Persistence.isAvailable())) {
+            return null;
+        }
+        try {
+            return JSON.parse(Persistence.getItem(getQuizScoreStorageKey()));
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function restoreQuizScoreDisplay() {
+        var savedState = loadQuizScoreState();
+        if (savedState) {
+            renderQuizScoreState(savedState);
+        }
+    }
+
+    function createQuizScoreTracker(characterCount) {
+        var mistakePenalty = 8;
+        var assistPenalty = 20;
+        var totalStrokesByChar = [];
+        var correctStrokesByChar = [];
+        var hintedStrokes = {};
+        var mistakes = 0;
+        var assists = 0;
+        var isComplete = false;
+
+        for (var i = 0; i < characterCount; i++) {
+            totalStrokesByChar.push(0);
+            correctStrokesByChar.push(0);
+        }
+
+        function sum(values) {
+            return values.reduce(function (total, value) {
+                return total + (Number(value) || 0);
+            }, 0);
+        }
+
+        function clampScore(value) {
+            return Math.max(0, Math.min(100, Math.round(value)));
+        }
+
+        function updateDisplay() {
+            var totalStrokes = sum(totalStrokesByChar);
+            var correctStrokes = sum(correctStrokesByChar);
+            var baseScore = totalStrokes ? (correctStrokes / totalStrokes) * 100 : 0;
+            var score = clampScore(baseScore - mistakes * mistakePenalty - assists * assistPenalty);
+            var state = {
+                score: score,
+                correctStrokes: correctStrokes,
+                totalStrokes: totalStrokes,
+                mistakes: mistakes,
+                assists: assists,
+                isComplete: isComplete
+            };
+
+            renderQuizScoreState(state);
+            saveQuizScoreState(state);
+        }
+
+        updateDisplay();
+
+        return {
+            setTotalStrokes: function (characterIndex, totalStrokes) {
+                totalStrokesByChar[characterIndex] = Number(totalStrokes) || 0;
+                updateDisplay();
+            },
+            markCorrectStroke: function (characterIndex, data) {
+                correctStrokesByChar[characterIndex] = Math.max(
+                    correctStrokesByChar[characterIndex] || 0,
+                    Number(data.strokeNum) + 1
+                );
+                updateDisplay();
+            },
+            markMistake: function () {
+                mistakes++;
+                updateDisplay();
+            },
+            markAssist: function () {
+                assists++;
+                updateDisplay();
+            },
+            markComplete: function () {
+                isComplete = true;
+                updateDisplay();
+            },
+            markHint: function (characterIndex, strokeNum) {
+                var key = characterIndex + ":" + strokeNum;
+                if (!hintedStrokes[key]) {
+                    hintedStrokes[key] = true;
+                    assists++;
+                    updateDisplay();
+                }
+            }
+        };
+    }
+
     function doPractice(p = false) {
         if (document.getElementById("back")) {
+            restoreQuizScoreDisplay();
             generateHanziOnFinishQuiz("unset", true);
             if (!p) {
                 showNextAndRevealBtn(false);
@@ -607,118 +786,146 @@
         document.getElementById("ch_load_status").style.display = "block";
 
         var hanziWriterList = [];
+        var quizScore = createQuizScoreTracker(characters.length);
+        window.xhActiveQuizScore = quizScore;
         var drawGrid = document.getElementById('character-target-div');
         drawGrid.innerHTML = "";
 
-        for (i = 0; i < characters.length; i++) {
-            var div = document.createElement('div');
-            div.id = "div" + i;
-            div.innerHTML = grid_data;
-            div.children[0].id = "grid-background-target" + i;
-            drawGrid.appendChild(div);
-            setStrokeColor(i);
-            var hanzi = characters[i];
-            var writer = HanziWriter.create('grid-background-target' + i, hanzi, {
-                onLoadCharDataSuccess: function (data) {
-                    document.getElementById("ch_load_status").style.color = "#4caf50";
-                },
-                onLoadCharDataError: function (reason) {
-                    document.getElementById("ch_load_status").style.color = "#ea2322";
-                },
+        for (var i = 0; i < characters.length; i++) {
+            (function (characterIndex) {
+                var div = document.createElement('div');
+                div.id = "div" + characterIndex;
+                div.innerHTML = grid_data;
+                div.children[0].id = "grid-background-target" + characterIndex;
+                drawGrid.appendChild(div);
+                setStrokeColor(characterIndex);
+                var hanzi = characters[characterIndex];
+                var writer = HanziWriter.create('grid-background-target' + characterIndex, hanzi, {
+                    onLoadCharDataSuccess: function (data) {
+                        document.getElementById("ch_load_status").style.color = "#4caf50";
+                        quizScore.setTotalStrokes(characterIndex, data.strokes.length);
+                    },
+                    onLoadCharDataError: function (reason) {
+                        document.getElementById("ch_load_status").style.color = "#ea2322";
+                    },
 
-                width: charWidth,
-                height: charHeight,
-                showCharacter: false,
-                showOutline: Persistence.getItem(frontBack + "text-outline") == "true" ? true : false,
-                highlightOnComplete: true,
-                highlightCompleteColor: stroke_color,
-                drawingWidth: strokeWidth,
-                strokeColor: stroke_color,
-                outlineColor: outline_color,
-                drawingColor: drawing_color,
-                showHintAfterMisses: strokeAfterMisses,
-                padding: 5
-            });
-
-            writerQuiz(writer);
-            hanziWriterList.push(writer);
-
-            var revealClickCount = 0;
-            document.getElementById("btnGoNextCard").onclick = function () {
-                revealClickCount = 0;
-                btnTapAudio();
-                writer = hanziWriterList[getCurrentHanziNum()];
-                writer.showOutline();
-                writer.showCharacter();
-
-                setTimeout(function () {
-                    onFinishQuizDrawHanzi();
-                }, 800);
-
-                setTimeout(function () {
-                    showNextHanzi();
-                }, 1000);
-            };
-
-            document.getElementById("text-outline").onclick = function () {
-                btnTapAudio();
-                document.getElementById("text-outline").checked ?
-                    writer.showOutline() : writer.hideOutline();
-            };
-
-            document.getElementById("btnRevealChar").onclick = function () {
-                btnTapAudio();
-                writer = hanziWriterList[getCurrentHanziNum()];
-                writer.showOutline();
-                if (revealClickCount == 0) {
-                    writer.animateCharacter();
-                } else if (revealClickCount == 1) {
-                    writer.showCharacter();
-                } else if (revealClickCount == 2) {
-                    writer.hideCharacter();
-                    writer.hideOutline();
-                    writerQuiz(writer);
-                } else {
-                    revealClickCount = -1;
-                    writerQuiz(writer);
-                }
-                revealClickCount++;
-            };
-
-            function writerQuiz(writer) {
-                writer.quiz({
-                    onComplete: function (summaryData) {
-                        onFinishQuizDrawHanzi();
-
-                        setTimeout(function () {
-                            showNextHanzi();
-                        }, 1000)
-                    }
+                    width: charWidth,
+                    height: charHeight,
+                    showCharacter: false,
+                    showOutline: Persistence.getItem(frontBack + "text-outline") == "true" ? true : false,
+                    highlightOnComplete: true,
+                    highlightCompleteColor: stroke_color,
+                    drawingWidth: strokeWidth,
+                    strokeColor: stroke_color,
+                    outlineColor: outline_color,
+                    drawingColor: drawing_color,
+                    showHintAfterMisses: strokeAfterMisses,
+                    acceptBackwardsStrokes: false,
+                    markStrokeCorrectAfterMisses: false,
+                    padding: 5
                 });
-            }
 
-            function getCurrentHanziNum() {
-                var characterDiv = document.querySelector('#character-target-div');
-                var characterElements = characterDiv.children;
-                var len = characterElements.length;
-                for (i = 0; i < len; i++) {
-                    var style = characterElements[i].style.display;
-                    if (style === 'block' || style === "") {
-                        return i;
+                writerQuiz(writer, characterIndex);
+                hanziWriterList.push(writer);
+            })(i);
+        }
+
+        var revealClickCount = 0;
+        document.getElementById("btnGoNextCard").onclick = function () {
+            revealClickCount = 0;
+            btnTapAudio();
+            var currentIndex = getCurrentHanziNum();
+            var writer = hanziWriterList[currentIndex];
+            quizScore.markAssist();
+            writer.showOutline();
+            writer.showCharacter();
+
+            setTimeout(function () {
+                onFinishQuizDrawHanzi();
+            }, 800);
+
+            setTimeout(function () {
+                showNextHanzi();
+            }, 1000);
+        };
+
+        document.getElementById("text-outline").onclick = function () {
+            btnTapAudio();
+            var currentIndex = getCurrentHanziNum();
+            var writer = hanziWriterList[currentIndex];
+            if (document.getElementById("text-outline").checked) {
+                quizScore.markAssist();
+                writer.showOutline();
+            } else {
+                writer.hideOutline();
+            }
+        };
+
+        document.getElementById("btnRevealChar").onclick = function () {
+            btnTapAudio();
+            var currentIndex = getCurrentHanziNum();
+            var writer = hanziWriterList[currentIndex];
+            quizScore.markAssist();
+            writer.showOutline();
+            if (revealClickCount == 0) {
+                writer.animateCharacter();
+            } else if (revealClickCount == 1) {
+                writer.showCharacter();
+            } else if (revealClickCount == 2) {
+                writer.hideCharacter();
+                writer.hideOutline();
+                writerQuiz(writer, currentIndex);
+            } else {
+                revealClickCount = -1;
+                writerQuiz(writer, currentIndex);
+            }
+            revealClickCount++;
+        };
+
+        function writerQuiz(writer, characterIndex) {
+            writer.quiz({
+                onMistake: function (data) {
+                    quizScore.markMistake();
+                    if (strokeAfterMisses && data.mistakesOnStroke >= strokeAfterMisses) {
+                        quizScore.markHint(characterIndex, data.strokeNum);
                     }
+                },
+                onCorrectStroke: function (data) {
+                    quizScore.markCorrectStroke(characterIndex, data);
+                },
+                onComplete: function (summaryData) {
+                    onFinishQuizDrawHanzi();
+                    revealClickCount = 0;
+
+                    setTimeout(function () {
+                        showNextHanzi();
+                    }, 1000)
+                }
+            });
+        }
+
+        function getCurrentHanziNum() {
+            var characterDiv = document.querySelector('#character-target-div');
+            var characterElements = characterDiv.children;
+            var len = characterElements.length;
+            for (var i = 0; i < len; i++) {
+                var style = characterElements[i].style.display;
+                if (style === 'block' || style === "") {
+                    return i;
                 }
             }
+            return 0;
+        }
 
-            function onFinishQuizDrawHanzi() {
-                var finishCharacterDiv = document.getElementById('onfinish-character-target-div');
-                var characterElements = finishCharacterDiv.children;
-                var len = characterElements.length;
-                for (i = 0; i < len; i++) {
-                    var style = characterElements[i].style.display;
-                    if (style === 'none' || style === "") {
-                        characterElements[i].style.display = "unset";
-                        break;
-                    }
+        function onFinishQuizDrawHanzi() {
+            var finishCharacterDiv = document.getElementById('onfinish-character-target-div');
+            var characterElements = finishCharacterDiv.children;
+            var len = characterElements.length;
+            for (var i = 0; i < len; i++) {
+                var style = characterElements[i].style.display;
+                if (style === 'none' || style === "") {
+                    characterElements[i].style.display = "unset";
+                    break;
                 }
             }
         }
@@ -749,6 +956,9 @@
             document.querySelector('#character-target-div').innerHTML = "";
             document.getElementById("ch_load_status").style.display = "none";
             generateHanziOnFinishQuiz("unset", true);
+            if (window.xhActiveQuizScore) {
+                window.xhActiveQuizScore.markComplete();
+            }
         }
 
         playAudio();
