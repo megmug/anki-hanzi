@@ -1,0 +1,46 @@
+name: Build APKG
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apkg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apkg:
+    name: Build APKG with Nix
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command
+
+      - name: Build APKG package
+        run: nix-build --out-link result
+
+      - name: Collect build artifacts
+        run: |
+          mkdir -p ci-artifacts
+          cp -L result/*.apkg result/*.json ci-artifacts/
+
+      - name: Upload APKG artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: xiehanzi-apkg-${{ github.sha }}
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+

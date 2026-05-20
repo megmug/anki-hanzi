@@ -29,6 +29,7 @@ custom_generate_xiehanzi_report.json
 custom_generate_xiehanzi_from_enriched_report.json
 source_comparison_output/
 master_db_output/
+ci-artifacts/
 
 .backup
 .config
