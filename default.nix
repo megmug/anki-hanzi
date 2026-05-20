@@ -2,7 +2,8 @@
     url = "https://github.com/nixos/nixpkgs/";
     ref = "nixos-25.11";
     rev = "d7a713c0b7e47c908258e71cba7a2d77cc8d71d5";
-} ) {} }:
+} ) {}
+}:
 
 let
   colorize-pinyin = pkgs.python3Packages.buildPythonPackage rec {
@@ -32,26 +33,164 @@ let
 
     doCheck = false;
   };
+
+  pythonEnv = pkgs.python3.withPackages (pythonPackages: with pythonPackages; [
+    ipykernel
+    colorize-pinyin
+    pinyin-tone-converter
+    dragonmapper
+    edge-tts
+    genanki
+  ]);
+
+  build-xiehanzi-apkg = pkgs.writeShellApplication {
+    name = "build-xiehanzi-apkg";
+    runtimeInputs = with pkgs; [
+      nodejs_20
+      yarn
+      pythonEnv
+    ];
+    text = ''
+      if [[ ! -f custom_build_cc_cedict_master_db.py || ! -f custom_generate_xiehanzi_deck_from_enriched_db.py ]]; then
+        echo "build-xiehanzi-apkg must be run from the Anki-xiehanzi repository root" >&2
+        exit 2
+      fi
+
+      export YARN_CACHE_FOLDER="''${YARN_CACHE_FOLDER:-$PWD/.yarn-cache}"
+      export npm_config_cache="''${npm_config_cache:-$PWD/.npm-cache}"
+
+      yarn install --frozen-lockfile
+      python custom_build_cc_cedict_master_db.py
+      python custom_enrich_xiehanzi_db.py
+      python custom_generate_xiehanzi_deck_from_enriched_db.py
+    '';
+  };
+
+  root = toString ./.;
+  relPath = path:
+    let
+      pathString = toString path;
+    in
+      if pathString == root then "" else pkgs.lib.removePrefix (root + "/") pathString;
+
+  localBuildSource = pkgs.lib.cleanSourceWith {
+    name = "anki-xiehanzi-local-build-source";
+    src = ./.;
+    filter = path: type:
+      let
+        rel = relPath path;
+        base = baseNameOf path;
+        isUnder = dir: rel == dir || pkgs.lib.hasPrefix (dir + "/") rel;
+        excludedDirs = [
+          ".git"
+          ".docusaurus"
+          ".npm-cache"
+          "anki-xie-hanzi-2.2.1-to-2.3-migrator"
+          "build"
+          "complete-hsk-vocabulary"
+          "node_modules"
+          "source_comparison_output"
+        ];
+        isMasterDbGenerated =
+          pkgs.lib.hasPrefix "master_db_output/" rel
+          && rel != "master_db_output/sources"
+          && rel != "master_db_output/sources/cedict_1_0_ts_utf-8_mdbg.zip";
+        isGeneratedFile =
+          base == ".DS_Store"
+          || rel == "result"
+          || pkgs.lib.hasSuffix ".apkg" base
+          || pkgs.lib.hasSuffix "_report.json" base
+          || pkgs.lib.hasSuffix "_comparison.json" base;
+      in
+        !(pkgs.lib.any isUnder excludedDirs)
+        && !isMasterDbGenerated
+        && !(type != "directory" && isGeneratedFile);
+  };
+
+  xiehanzi-apkg = pkgs.stdenvNoCC.mkDerivation {
+    pname = "anki-xiehanzi-custom-apkg";
+    version = "2025-local";
+    src = localBuildSource;
+
+    nativeBuildInputs = with pkgs; [
+      nodejs_20
+      yarn
+      pythonEnv
+      build-xiehanzi-apkg
+      pkg-config
+      gnumake
+    ];
+
+    dontConfigure = true;
+
+    shellHook = ''
+      export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
+      export npm_config_cache="$PWD/.npm-cache"
+    '';
+
+    buildPhase = ''
+      runHook preBuild
+
+      export HOME="$TMPDIR/home"
+      export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
+      export npm_config_cache="$TMPDIR/npm-cache"
+      mkdir -p "$HOME" "$npm_config_cache"
+
+      yarn install --offline --frozen-lockfile --cache-folder "$YARN_CACHE_FOLDER"
+      python custom_build_cc_cedict_master_db.py --no-download
+      python custom_enrich_xiehanzi_db.py
+
+      # Nix source paths use normalized mtimes that can predate ZIP's 1980
+      # lower bound. Use the generator's fixed ZIP timestamp for all media
+      # files materialized in this transitional store build.
+      find . -type f -exec touch -t 202605200639.48 {} +
+
+      python custom_generate_xiehanzi_deck.py \
+        --timestamp 1779251987.6 \
+        --zip-generated-datetime 2026-05-20T06:39:48
+      python custom_generate_xiehanzi_deck_from_enriched_db.py
+      python - <<'PY'
+      from pathlib import Path
+      import hashlib
+      import json
+
+      outputs = [
+          Path("Anki-xiehanzi - New HSK (2025).apkg"),
+          Path("Anki-xiehanzi - New HSK (2025) from enriched.apkg"),
+      ]
+
+      report = {}
+      for path in outputs:
+          data = path.read_bytes()
+          report[path.name] = {
+              "size": len(data),
+              "sha256": hashlib.sha256(data).hexdigest(),
+          }
+
+      Path("custom_generate_xiehanzi_apkg_hashes.json").write_text(
+          json.dumps(report, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      print(json.dumps(report, indent=2, sort_keys=True))
+      PY
+
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+
+      mkdir -p "$out"
+      cp "Anki-xiehanzi - New HSK (2025).apkg" "$out/"
+      cp "Anki-xiehanzi - New HSK (2025) from enriched.apkg" "$out/"
+      cp custom_generate_xiehanzi_report.json "$out/"
+      cp custom_generate_xiehanzi_from_enriched_report.json "$out/"
+      cp custom_generate_xiehanzi_apkg_hashes.json "$out/"
+      cp master_db_output/xiehanzi_enrichment_report.json "$out/"
+
+      runHook postInstall
+    '';
+  };
 in
 
-pkgs.mkShell {
-  packages = with pkgs; [
-    nodejs_20
-    yarn
-    (python3.withPackages (pythonPackages: with pythonPackages; [
-      ipykernel
-      colorize-pinyin
-      pinyin-tone-converter
-      dragonmapper
-      edge-tts
-      genanki
-    ]))
-    pkg-config
-    gnumake
-  ];
-
-  shellHook = ''
-    export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
-    export npm_config_cache="$PWD/.npm-cache"
-  '';
-}
+xiehanzi-apkg
