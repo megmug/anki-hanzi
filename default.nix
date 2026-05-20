@@ -43,6 +43,11 @@ let
     genanki
   ]);
 
+  yarnOfflineCache = pkgs.fetchYarnDeps {
+    yarnLock = ./yarn.lock;
+    hash = "sha256-Vw4clkczVEKsY9A3+QKTN0psBOhhaCQhteB+rjRdemI=";
+  };
+
   build-xiehanzi-apkg = pkgs.writeShellApplication {
     name = "build-xiehanzi-apkg";
     runtimeInputs = with pkgs; [
@@ -85,6 +90,7 @@ let
           ".git"
           ".docusaurus"
           ".npm-cache"
+          ".yarn-cache"
           "anki-xie-hanzi-2.2.1-to-2.3-migrator"
           "build"
           "complete-hsk-vocabulary"
@@ -111,17 +117,21 @@ let
     pname = "anki-xiehanzi-custom-apkg";
     version = "2025-local";
     src = localBuildSource;
+    inherit yarnOfflineCache;
 
     nativeBuildInputs = with pkgs; [
       nodejs_20
-      yarn
+      yarnConfigHook
       pythonEnv
       build-xiehanzi-apkg
       pkg-config
       gnumake
     ];
 
-    dontConfigure = true;
+    configurePhase = ''
+      runHook preConfigure
+      runHook postConfigure
+    '';
 
     shellHook = ''
       export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
@@ -132,11 +142,8 @@ let
       runHook preBuild
 
       export HOME="$TMPDIR/home"
-      export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
-      export npm_config_cache="$TMPDIR/npm-cache"
-      mkdir -p "$HOME" "$npm_config_cache"
+      mkdir -p "$HOME"
 
-      yarn install --offline --frozen-lockfile --cache-folder "$YARN_CACHE_FOLDER"
       python custom_build_cc_cedict_master_db.py --no-download
       python custom_enrich_xiehanzi_db.py
 
@@ -149,30 +156,10 @@ let
         --timestamp 1779251987.6 \
         --zip-generated-datetime 2026-05-20T06:39:48
       python custom_generate_xiehanzi_deck_from_enriched_db.py
-      python - <<'PY'
-      from pathlib import Path
-      import hashlib
-      import json
-
-      outputs = [
-          Path("Anki-xiehanzi - New HSK (2025).apkg"),
-          Path("Anki-xiehanzi - New HSK (2025) from enriched.apkg"),
-      ]
-
-      report = {}
-      for path in outputs:
-          data = path.read_bytes()
-          report[path.name] = {
-              "size": len(data),
-              "sha256": hashlib.sha256(data).hexdigest(),
-          }
-
-      Path("custom_generate_xiehanzi_apkg_hashes.json").write_text(
-          json.dumps(report, indent=2, sort_keys=True) + "\n",
-          encoding="utf-8",
-      )
-      print(json.dumps(report, indent=2, sort_keys=True))
-      PY
+      python custom_verify_xiehanzi_apkg_build.py \
+        --reference "Anki-xiehanzi - New HSK (2025).apkg" \
+        --candidate "Anki-xiehanzi - New HSK (2025) from enriched.apkg" \
+        --output custom_generate_xiehanzi_build_verification.json
 
       runHook postBuild
     '';
@@ -185,7 +172,7 @@ let
       cp "Anki-xiehanzi - New HSK (2025) from enriched.apkg" "$out/"
       cp custom_generate_xiehanzi_report.json "$out/"
       cp custom_generate_xiehanzi_from_enriched_report.json "$out/"
-      cp custom_generate_xiehanzi_apkg_hashes.json "$out/"
+      cp custom_generate_xiehanzi_build_verification.json "$out/"
       cp master_db_output/xiehanzi_enrichment_report.json "$out/"
 
       runHook postInstall
