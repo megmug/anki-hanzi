@@ -104,14 +104,16 @@ HSK 2.0 deck
 
 </details>
 
-## Create
+## Custom APKG Build
 
-Create Anki-xiehanzi deck from simplified word, paragraph and file containing simplified characters.
+This fork builds the custom APKG from the repository inputs with Nix:
 
-https://krmanik.github.io/Anki-xiehanzi/create
+```sh
+nix-build --out-link result
+```
 
-## Docs
-View [docs](https://krmanik.github.io/Anki-xiehanzi/docs/intro)
+The Docusaurus website and browser-based deck generator have been removed from
+this fork. The APKG build path is the Python/Nix pipeline.
 
 ## Acknowledgement
 I have not designed the writing chinese js library Hanziwriter. It comes from the awesome [Hanziwriter](https://hanziwriter.org) JavaScript library. 

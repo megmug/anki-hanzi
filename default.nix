@@ -45,7 +45,7 @@ let
 
   yarnOfflineCache = pkgs.fetchYarnDeps {
     yarnLock = ./yarn.lock;
-    hash = "sha256-Vw4clkczVEKsY9A3+QKTN0psBOhhaCQhteB+rjRdemI=";
+    hash = "sha256-fWhXM2cU1MwofvZTNq3SHwRsdbbkP5KdeARewXML6Xo=";
   };
 
   root = toString ./.;
