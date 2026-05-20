@@ -11,6 +11,8 @@ __pycache__
 
 # Misc
 .DS_Store
+/result
+_migrator-repo
 .env.local
 .env.development.local
 .env.test.local
@@ -24,9 +26,13 @@ yarn-error.log*
 .npm-cache/
 extra_audio/
 custom_generate_xiehanzi_report.json
+custom_generate_xiehanzi_from_enriched_report.json
+source_comparison_output/
+master_db_output/
 
 .backup
 .config
 
 Anki-xiehanzi - New HSK (2025).apkg
+Anki-xiehanzi - New HSK (2025) from enriched.apkg
 Anki-xiehanzi - New HSK (2025) with sentences.apkg
