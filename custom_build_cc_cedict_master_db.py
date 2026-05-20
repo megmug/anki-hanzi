@@ -17,14 +17,11 @@ import argparse
 import json
 import re
 import sys
-import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
 
-DEFAULT_CEDICT_URL = "https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.zip"
-DEFAULT_CEDICT_SHA256 = "5ae885402b7873dea15f3f905bd4ac0e078d9cf68ddd873f0065fd7119154856"
-DEFAULT_SOURCE_ZIP = Path("master_db_output/sources/cedict_1_0_ts_utf-8_mdbg.zip")
+DEFAULT_SNAPSHOT_MANIFEST = Path("third_party/cc-cedict/snapshot.json")
 DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_master.json")
 EXPECTED_ZIP_MEMBER = "cedict_ts.u8"
 
@@ -139,12 +136,25 @@ def parse_cedict_text(text: str) -> tuple[list[str], list[dict[str, Any]], int]:
     return comments, entries, rejected_count
 
 
-def download_if_needed(url: str, output: Path) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.exists():
-        return
-    with urllib.request.urlopen(url) as response:
-        output.write_bytes(response.read())
+def load_snapshot_manifest(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(f"missing snapshot manifest: {path}")
+
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    missing_fields = [
+        field
+        for field in ["archive_filename", "sha256", "source_url"]
+        if not manifest.get(field)
+    ]
+    if missing_fields:
+        raise ValueError(f"snapshot manifest is missing required fields: {', '.join(missing_fields)}")
+    return manifest
+
+
+def resolve_source_zip(manifest_path: Path, manifest: dict[str, Any], override: Path | None) -> Path:
+    if override is not None:
+        return override
+    return manifest_path.parent / manifest["archive_filename"]
 
 
 def read_cedict_member(zip_path: Path, member_name: str) -> tuple[str, dict[str, Any]]:
@@ -206,34 +216,38 @@ def build_database(source_zip: Path, url: str, expected_sha256: str, output_path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--url", default=DEFAULT_CEDICT_URL, help="CC-CEDICT zip URL to download.")
-    parser.add_argument("--source-zip", type=Path, default=DEFAULT_SOURCE_ZIP, help="Pinned CC-CEDICT zip path.")
-    parser.add_argument("--sha256", default=DEFAULT_CEDICT_SHA256, help="Expected SHA256 for the pinned zip.")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output master JSON path.")
     parser.add_argument(
-        "--no-download",
-        action="store_true",
-        help="Do not download; fail if --source-zip does not already exist.",
+        "--snapshot-manifest",
+        type=Path,
+        default=DEFAULT_SNAPSHOT_MANIFEST,
+        help="Snapshot manifest with the pinned source filename, SHA256, and source URL.",
     )
+    parser.add_argument("--source-zip", type=Path, default=None, help="Optional pinned CC-CEDICT zip override.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output master JSON path.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    if not args.no_download:
-        download_if_needed(args.url, args.source_zip)
-    if not args.source_zip.exists():
-        print(f"missing source zip: {args.source_zip}", file=sys.stderr)
+    try:
+        manifest = load_snapshot_manifest(args.snapshot_manifest)
+    except (FileNotFoundError, ValueError) as error:
+        print(error, file=sys.stderr)
+        return 2
+
+    source_zip = resolve_source_zip(args.snapshot_manifest, manifest, args.source_zip)
+    if not source_zip.exists():
+        print(f"missing source zip: {source_zip}", file=sys.stderr)
         return 2
 
     database = build_database(
-        source_zip=args.source_zip,
-        url=args.url,
-        expected_sha256=args.sha256,
+        source_zip=source_zip,
+        url=manifest["source_url"],
+        expected_sha256=manifest["sha256"],
         output_path=args.output,
     )
     print("CC-CEDICT master JSON generated")
-    print(f"source zip: {args.source_zip}")
+    print(f"source zip: {source_zip}")
     print(f"output: {args.output}")
     print(json.dumps(database["summary"], ensure_ascii=False, indent=2, sort_keys=True))
     return 0

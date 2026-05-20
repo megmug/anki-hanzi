@@ -48,29 +48,6 @@ let
     hash = "sha256-Vw4clkczVEKsY9A3+QKTN0psBOhhaCQhteB+rjRdemI=";
   };
 
-  build-xiehanzi-apkg = pkgs.writeShellApplication {
-    name = "build-xiehanzi-apkg";
-    runtimeInputs = with pkgs; [
-      nodejs_20
-      yarn
-      pythonEnv
-    ];
-    text = ''
-      if [[ ! -f custom_build_cc_cedict_master_db.py || ! -f custom_generate_xiehanzi_deck_from_enriched_db.py ]]; then
-        echo "build-xiehanzi-apkg must be run from the Anki-xiehanzi repository root" >&2
-        exit 2
-      fi
-
-      export YARN_CACHE_FOLDER="''${YARN_CACHE_FOLDER:-$PWD/.yarn-cache}"
-      export npm_config_cache="''${npm_config_cache:-$PWD/.npm-cache}"
-
-      yarn install --frozen-lockfile
-      python custom_build_cc_cedict_master_db.py
-      python custom_enrich_xiehanzi_db.py
-      python custom_generate_xiehanzi_deck_from_enriched_db.py
-    '';
-  };
-
   root = toString ./.;
   relPath = path:
     let
@@ -97,10 +74,7 @@ let
           "node_modules"
           "source_comparison_output"
         ];
-        isMasterDbGenerated =
-          pkgs.lib.hasPrefix "master_db_output/" rel
-          && rel != "master_db_output/sources"
-          && rel != "master_db_output/sources/cedict_1_0_ts_utf-8_mdbg.zip";
+        isMasterDbGenerated = pkgs.lib.hasPrefix "master_db_output/" rel;
         isGeneratedFile =
           base == ".DS_Store"
           || rel == "result"
@@ -123,7 +97,6 @@ let
       nodejs_20
       yarnConfigHook
       pythonEnv
-      build-xiehanzi-apkg
       pkg-config
       gnumake
     ];
@@ -144,7 +117,7 @@ let
       export HOME="$TMPDIR/home"
       mkdir -p "$HOME"
 
-      python custom_build_cc_cedict_master_db.py --no-download
+      python custom_build_cc_cedict_master_db.py
       python custom_enrich_xiehanzi_db.py
 
       # Nix source paths use normalized mtimes that can predate ZIP's 1980
