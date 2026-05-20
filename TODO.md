@@ -32,6 +32,11 @@ the work incremental.
 
 - Simplify and unify the data basis.
 - Reduce redundant prepared data files and unclear intermediate artifacts.
+- Prototype a pinned CC-CEDICT importer that generates a reproducible master JSON
+  lexicon before applying HSK/xiehanzi/custom overlays.
+- Evaluate `drkameleon/complete-hsk-vocabulary` as a cleaner primary HSK source.
+- As a first experiment, add `complete-hsk-vocabulary` as a submodule and try to
+  reproduce the current custom deck from its `complete.json` data.
 - Consider a larger lexical basis, such as CC-CEDICT plus character metadata, but
   keep it clean and filtered.
 - Treat HSK as tags/metadata, not as the primary deck structure.
@@ -60,6 +65,13 @@ the work incremental.
 - Avoid mixing npm and Yarn long-term; prefer Nix plus one JavaScript package
   manager, probably Yarn.
 - Keep lockfiles intentional and documented.
+
+## Audio
+
+- Evaluate Qwen3-TTS as a possible replacement or optional backend for generated
+  Mandarin audio.
+- Compare generated audio quality, latency, licensing, reproducibility, and CI
+  feasibility against the current `edge-tts` path.
 
 ## Reproducibility
 
