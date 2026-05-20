@@ -340,6 +340,11 @@ def remove_zero_length_audio_files() -> list[str]:
     return removed
 
 
+def remove_failed_audio_output(path: Path) -> None:
+    if path.exists() and path.stat().st_size == 0:
+        path.unlink()
+
+
 def generate_missing_audio(entries: list[WordEntry]) -> tuple[list[str], list[dict[str, str]], list[str]]:
     removed_zero_length = remove_zero_length_audio_files()
     generated: list[str] = []
@@ -362,12 +367,14 @@ def generate_missing_audio(entries: list[WordEntry]) -> tuple[list[str], list[di
             if output_path.exists() and output_path.stat().st_size > 0:
                 generated.append(str(output_path))
             else:
+                remove_failed_audio_output(output_path)
                 failed.append({
                     "word": word,
                     "file": str(output_path),
                     "error": "edge-tts produced no audio data",
                 })
         except Exception as exc:
+            remove_failed_audio_output(output_path)
             failed.append({
                 "word": word,
                 "file": str(output_path),
