@@ -22,12 +22,15 @@ Run from the repository root inside the Nix shell:
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import html
 import json
 import re
+import tempfile
 import unicodedata
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +48,7 @@ EXTRA_WORDS_PATH = Path("extra_words.tsv")
 HANZI_WRITER_PACKAGE_JSON = Path("node_modules/hanzi-writer/package.json")
 HANZI_WRITER_BUNDLE = Path("node_modules/hanzi-writer/dist/hanzi-writer.min.js")
 VOICE = "zh-CN-XiaoxiaoNeural"
+GENERATED_ZIP_MEMBERS = {"collection.anki2", "media"}
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
 CARD_TYPES = ["Meaning", "Pinyin", "Write"]
@@ -392,7 +396,93 @@ def collect_media(entries: list[WordEntry]) -> tuple[list[str], list[str]]:
     return media, sorted(set(missing_audio))
 
 
+def copy_zip_info(reference_info: zipfile.ZipInfo, filename: str | None = None) -> zipfile.ZipInfo:
+    output_info = zipfile.ZipInfo(filename or reference_info.filename, reference_info.date_time)
+    output_info.compress_type = reference_info.compress_type
+    output_info.external_attr = reference_info.external_attr
+    output_info.internal_attr = reference_info.internal_attr
+    output_info.comment = reference_info.comment
+    output_info.extra = reference_info.extra
+    output_info.create_system = reference_info.create_system
+    return output_info
+
+
+def rewrite_generated_zip_datetimes(
+    source: Path,
+    output: Path,
+    generated_datetime: tuple[int, int, int, int, int, int],
+) -> None:
+    with zipfile.ZipFile(source) as source_zip, zipfile.ZipFile(output, "w") as output_zip:
+        for info in source_zip.infolist():
+            data = source_zip.read(info.filename)
+            output_info = copy_zip_info(info)
+            if info.filename in GENERATED_ZIP_MEMBERS:
+                output_info.date_time = generated_datetime
+            output_zip.writestr(output_info, data)
+
+
+def parse_zip_datetime(value: str) -> tuple[int, int, int, int, int, int]:
+    try:
+        date_part, time_part = value.replace("T", " ").split()
+        year, month, day = (int(part) for part in date_part.split("-"))
+        hour, minute, second = (int(part) for part in time_part.split(":"))
+    except Exception as exc:
+        raise argparse.ArgumentTypeError(
+            "Expected datetime in YYYY-MM-DDTHH:MM:SS format"
+        ) from exc
+    return year, month, day, hour, minute, second
+
+
+def write_package(
+    package: genanki.Package,
+    output_apkg: Path,
+    timestamp: float | None,
+    zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
+) -> None:
+    if zip_generated_datetime is None:
+        if timestamp is None:
+            package.write_to_file(str(output_apkg))
+        else:
+            package.write_to_file(str(output_apkg), timestamp=timestamp)
+        return
+
+    with tempfile.NamedTemporaryFile(suffix=".apkg", delete=False) as handle:
+        temporary_path = Path(handle.name)
+
+    try:
+        if timestamp is None:
+            package.write_to_file(str(temporary_path))
+        else:
+            package.write_to_file(str(temporary_path), timestamp=timestamp)
+
+        rewrite_generated_zip_datetimes(
+            source=temporary_path,
+            output=output_apkg,
+            generated_datetime=zip_generated_datetime,
+        )
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--timestamp",
+        type=float,
+        default=None,
+        help="Optional fixed genanki timestamp for deterministic comparison builds.",
+    )
+    parser.add_argument(
+        "--zip-generated-datetime",
+        type=parse_zip_datetime,
+        default=None,
+        help="Optionally set ZIP timestamps for generated members collection.anki2 and media. Format: YYYY-MM-DDTHH:MM:SS.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     hsk_entries, hsk_keys, dropped_duplicates = load_hsk_entries()
     extra_entries, skipped_extra_duplicates = load_extra_entries(hsk_keys)
     all_entries = [entry for level in LEVELS for entry in hsk_entries[level]] + extra_entries
@@ -402,7 +492,12 @@ def main() -> None:
     decks = build_decks(models, hsk_entries, extra_entries)
     media_files, missing_audio = collect_media(all_entries)
 
-    genanki.Package(decks, media_files=media_files).write_to_file(str(OUTPUT_APKG))
+    write_package(
+        genanki.Package(decks, media_files=media_files),
+        output_apkg=OUTPUT_APKG,
+        timestamp=args.timestamp,
+        zip_generated_datetime=args.zip_generated_datetime,
+    )
 
     report = {
         "output": str(OUTPUT_APKG),
@@ -428,6 +523,8 @@ def main() -> None:
         "skipped_extra_duplicates": skipped_extra_duplicates,
         "missing_audio_files": missing_audio,
         "hsk_counts": {level: len(hsk_entries[level]) for level in LEVELS},
+        "timestamp": args.timestamp,
+        "zip_generated_datetime": args.zip_generated_datetime,
     }
     REPORT_PATH.write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),

@@ -1,3 +1,6 @@
 [submodule "HSK-3.0-words-list"]
 	path = HSK-3.0-words-list
 	url = https://github.com/krmanik/HSK-3.0-words-list.git
+[submodule "complete-hsk-vocabulary"]
+	path = complete-hsk-vocabulary
+	url = https://github.com/drkameleon/complete-hsk-vocabulary.git
