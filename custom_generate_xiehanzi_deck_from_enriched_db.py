@@ -76,25 +76,39 @@ def load_enriched_entries(enriched_db_path: Path) -> tuple[dict[str, list[Enrich
     extra_entries: list[EnrichedWordEntry] = []
 
     for word in database.get("words", []):
-        for raw_entry in (word.get("xiehanzi") or {}).get("deck_entries", []):
+        simplified = str(word["simplified"])
+        xiehanzi = word.get("xiehanzi") or {}
+        frequency = xiehanzi.get("frequency")
+        form_entries = [
+            raw_entry
+            for form in word.get("forms", [])
+            for raw_entry in (
+                (form.get("xiehanzi") or {}).get("study_targets")
+                or (form.get("xiehanzi") or {}).get("deck_entries", [])
+            )
+        ]
+        raw_entries = form_entries or xiehanzi.get("study_targets", []) or xiehanzi.get("deck_entries", [])
+
+        for raw_entry in raw_entries:
+            deck_level = str(raw_entry["deck_level"])
             entry = EnrichedWordEntry(
-                simplified=str(raw_entry["simplified"]),
+                simplified=simplified,
                 traditional=str(raw_entry["traditional"]),
                 pinyin=str(raw_entry["pinyin"]),
                 zhuyin=str(raw_entry["zhuyin"]),
                 level=str(raw_entry["raw_level"]),
                 pos=str(raw_entry["pos"]),
-                frequency="" if raw_entry.get("frequency") is None else str(raw_entry["frequency"]),
+                frequency="" if frequency is None else str(frequency),
                 definition_html=str(raw_entry["meaning_html"]),
-                source=str(raw_entry["source"]),
-                audio_filename=str(raw_entry["audio_filename"]),
+                source="Extra" if deck_level == "Extra" else f"HSK {deck_level}",
+                audio_filename=f"cmn-{simplified}.mp3",
                 deck_order=int(raw_entry["deck_order"]),
             )
 
-            if raw_entry["deck_level"] == "Extra":
+            if deck_level == "Extra":
                 extra_entries.append(entry)
             else:
-                by_level[str(raw_entry["deck_level"])].append(entry)
+                by_level[deck_level].append(entry)
 
     for entries in [*by_level.values(), extra_entries]:
         entries.sort(key=lambda entry: entry.deck_order)

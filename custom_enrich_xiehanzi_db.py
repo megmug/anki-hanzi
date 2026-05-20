@@ -7,10 +7,10 @@ This is a separate pipeline stage:
 
     CC-CEDICT master JSON + xiehanzi TSV files -> enriched JSON -> deck generator
 
-The enriched output keeps the CC-CEDICT words unchanged and adds a structured
-`xiehanzi.deck_entries` overlay. Those entries intentionally mirror the data the
-Python deck generator currently needs, while keeping ingestion independent from
-APKG generation.
+The enriched output keeps the CC-CEDICT words as the organizing structure and
+adds xiehanzi study targets under matching `forms[].xiehanzi.study_targets`.
+Those entries intentionally mirror the data the Python deck generator currently
+needs, while keeping ingestion independent from APKG generation.
 
 Run from the repository root inside the Nix shell:
 
@@ -27,6 +27,8 @@ import re
 import unicodedata
 from pathlib import Path
 from typing import Any
+
+from dragonmapper import transcriptions
 
 
 DEFAULT_MASTER_DB = Path("master_db_output/cc_cedict_master.json")
@@ -61,6 +63,54 @@ def dedupe_key(entry: dict[str, Any]) -> tuple[str, str]:
 
 def printable_key(key: tuple[str, str]) -> str:
     return "::".join(key)
+
+
+PINYIN_SEPARATOR_RE = re.compile(r"[\s'’\-·]+")
+
+
+def normalize_pinyin_lookup_key(value: str) -> str:
+    return PINYIN_SEPARATOR_RE.sub(
+        "",
+        normalize_field(value).replace("u:", "v").replace("ü", "v"),
+    )
+
+
+def pinyin_lookup_keys(value: str) -> list[str]:
+    keys: list[str] = []
+    for part in re.split(r"/", value or ""):
+        if not part.strip():
+            continue
+
+        if re.search(r"\d", part):
+            numbered = part
+        else:
+            try:
+                numbered = transcriptions.accented_to_numbered(part)
+            except ValueError:
+                numbered = part
+
+        key = normalize_pinyin_lookup_key(numbered)
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def pinyin_lookup_key(value: str) -> str:
+    keys = pinyin_lookup_keys(value)
+    return keys[0] if keys else ""
+
+
+def toneless_pinyin_lookup_key(value: str) -> str:
+    return re.sub(r"\d", "", pinyin_lookup_key(value))
+
+
+def toneless_pinyin_lookup_keys(value: str) -> list[str]:
+    keys: list[str] = []
+    for key in pinyin_lookup_keys(value):
+        toneless_key = re.sub(r"\d", "", key)
+        if toneless_key and toneless_key not in keys:
+            keys.append(toneless_key)
+    return keys
 
 
 def parse_frequency(value: str) -> int | None:
@@ -216,6 +266,30 @@ def build_word_index(words: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return index
 
 
+LI_RE = re.compile(r"<li>(.*?)</li>", re.IGNORECASE | re.DOTALL)
+
+
+def strip_html_text(value: str) -> str:
+    value = html.unescape(value or "")
+    value = re.sub(r"<[^>]+>", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def definitions_from_meaning_html(value: str) -> list[str]:
+    parts = LI_RE.findall(value or "") or [value]
+    definitions: list[str] = []
+    seen: set[str] = set()
+
+    for part in parts:
+        definition = strip_html_text(part)
+        if not definition or definition in seen:
+            continue
+        definitions.append(definition)
+        seen.add(definition)
+
+    return definitions
+
+
 def build_synthetic_words(missing_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_simplified: dict[str, dict[str, Any]] = {}
 
@@ -226,7 +300,7 @@ def build_synthetic_words(missing_entries: list[dict[str, Any]]) -> list[dict[st
             word = {
                 "simplified": simplified,
                 "traditional_variants": [],
-                "forms": [],
+                "forms_by_pinyin": {},
                 "tags": ["missing:cc-cedict", "source:xiehanzi"],
             }
             by_simplified[simplified] = word
@@ -235,7 +309,32 @@ def build_synthetic_words(missing_entries: list[dict[str, Any]]) -> list[dict[st
         if traditional and traditional not in word["traditional_variants"]:
             word["traditional_variants"].append(traditional)
 
-    return sorted(by_simplified.values(), key=lambda word: word["simplified"])
+        form_key = entry["pinyin"]
+        form = word["forms_by_pinyin"].get(form_key)
+        if form is None:
+            form = {
+                "traditional_variants": [],
+                "pinyin": entry["pinyin"],
+                "definitions": [],
+                "tags": [],
+            }
+            word["forms_by_pinyin"][form_key] = form
+
+        if traditional and traditional not in form["traditional_variants"]:
+            form["traditional_variants"].append(traditional)
+
+        append_unique(form["definitions"], definitions_from_meaning_html(entry["meaning_html"]))
+        append_unique(form["tags"], entry["tags"])
+        form["tags"].sort()
+
+    synthetic_words: list[dict[str, Any]] = []
+    for word in by_simplified.values():
+        forms = list(word.pop("forms_by_pinyin").values())
+        forms.sort(key=lambda form: form["pinyin"])
+        word["forms"] = forms
+        synthetic_words.append(word)
+
+    return sorted(synthetic_words, key=lambda word: word["simplified"])
 
 
 def append_unique(values: list[str], new_values: list[str]) -> None:
@@ -247,12 +346,78 @@ def append_unique(values: list[str], new_values: list[str]) -> None:
         seen.add(value)
 
 
+def study_target_payload(entry: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(entry)
+    payload.pop("simplified", None)
+    payload.pop("audio_filename", None)
+    payload.pop("frequency", None)
+    payload.pop("source", None)
+    payload.pop("tags", None)
+    return payload
+
+
+def find_or_create_xiehanzi_form(
+    word: dict[str, Any],
+    entry: dict[str, Any],
+    form_stats: dict[str, Any],
+) -> dict[str, Any]:
+    forms = word.setdefault("forms", [])
+    entry_keys = pinyin_lookup_keys(entry["pinyin"])
+
+    for form in forms:
+        form_keys = pinyin_lookup_keys(str(form.get("pinyin") or ""))
+        if set(form_keys).intersection(entry_keys):
+            form_stats["matched"] += 1
+            if form_keys != entry_keys:
+                form_stats["matched_pinyin_variant"] += 1
+            return form
+
+    entry_toneless_keys = toneless_pinyin_lookup_keys(entry["pinyin"])
+    toneless_matches = [
+        form
+        for form in forms
+        if set(toneless_pinyin_lookup_keys(str(form.get("pinyin") or ""))).intersection(entry_toneless_keys)
+    ]
+    if len(toneless_matches) == 1:
+        form_stats["matched"] += 1
+        form_stats["matched_toneless"] += 1
+        return toneless_matches[0]
+
+    form = {
+        "traditional_variants": [],
+        "pinyin": entry["pinyin"],
+        "definitions": definitions_from_meaning_html(entry["meaning_html"]),
+        "tags": ["missing:cc-cedict-form", "source:xiehanzi"],
+    }
+    forms.append(form)
+    forms.sort(key=lambda form: form["pinyin"])
+    form_stats["created"] += 1
+    form_stats["created_entries"].append({
+        "entry": entry_summary(entry),
+        "lookup_key": entry_keys[0] if entry_keys else "",
+        "lookup_keys": entry_keys,
+        "available_form_pinyins": [
+            str(existing_form.get("pinyin") or "")
+            for existing_form in forms
+            if existing_form is not form
+        ],
+    })
+    return form
+
+
 def attach_deck_entries_to_words(
     words: list[dict[str, Any]],
     deck_entries: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     word_index = build_word_index(words)
     unmatched: list[dict[str, Any]] = []
+    form_stats = {
+        "matched": 0,
+        "matched_pinyin_variant": 0,
+        "matched_toneless": 0,
+        "created": 0,
+        "created_entries": [],
+    }
 
     for entry in deck_entries:
         word = word_index.get(normalize_field(entry["simplified"]))
@@ -265,20 +430,37 @@ def attach_deck_entries_to_words(
         word["tags"].sort()
 
         xiehanzi = word.setdefault("xiehanzi", {})
-        xiehanzi.setdefault("deck_entries", []).append(entry)
+        xiehanzi.setdefault("frequency", entry["frequency"])
+
+        form = find_or_create_xiehanzi_form(word, entry, form_stats)
+        append_unique(form.setdefault("traditional_variants", []), [entry["traditional"]])
+        append_unique(form.setdefault("tags", []), entry["tags"])
+        form["tags"].sort()
+        form_xiehanzi = form.setdefault("xiehanzi", {})
+        form_xiehanzi.setdefault("study_targets", []).append(study_target_payload(entry))
 
     for word in words:
         xiehanzi = word.get("xiehanzi")
-        if not xiehanzi:
-            continue
-        xiehanzi["deck_entries"].sort(
-            key=lambda entry: (
-                entry["deck_level"],
-                entry["deck_order"],
+        if xiehanzi and xiehanzi.get("deck_entries"):
+            xiehanzi["deck_entries"].sort(
+                key=lambda entry: (
+                    entry["deck_level"],
+                    entry["deck_order"],
+                )
             )
-        )
 
-    return unmatched
+        for form in word.get("forms", []):
+            form_xiehanzi = form.get("xiehanzi")
+            if not form_xiehanzi:
+                continue
+            form_xiehanzi["study_targets"].sort(
+                key=lambda entry: (
+                    entry["deck_level"],
+                    entry["deck_order"],
+                )
+            )
+
+    return unmatched, form_stats
 
 
 def summarize_by_level(entries: list[dict[str, Any]]) -> dict[str, int]:
@@ -315,7 +497,7 @@ def enrich_database(
     synthetic_words = build_synthetic_words(missing_deck_entries_before_stubs)
     words = [*base_words, *synthetic_words]
     words.sort(key=lambda word: word["simplified"])
-    missing_deck_after_stubs = attach_deck_entries_to_words(words, deck_entries)
+    missing_deck_after_stubs, form_stats = attach_deck_entries_to_words(words, deck_entries)
 
     enriched = {
         "schema": "xiehanzi-enriched-lexicon-v1",
@@ -343,10 +525,15 @@ def enrich_database(
             "deck_entries_missing_base_word": len(missing_deck_entries_before_stubs),
             "deck_entries_missing_enriched_word": len(missing_deck_after_stubs),
             "deck_entries_by_level": summarize_by_level(deck_entries),
+            "xiehanzi_form_targets": form_stats["matched"] + form_stats["created"],
+            "xiehanzi_form_matches": form_stats["matched"],
+            "xiehanzi_form_pinyin_variant_matches": form_stats["matched_pinyin_variant"],
+            "xiehanzi_form_toneless_matches": form_stats["matched_toneless"],
+            "xiehanzi_form_stubs_created": form_stats["created"],
         },
         "words": words,
         "xiehanzi": {
-            "deck_entries_location": "words[].xiehanzi.deck_entries",
+            "study_targets_location": "words[].forms[].xiehanzi.study_targets",
             "dropped_duplicates": dropped_duplicates,
             "skipped_extra_duplicates": skipped_extra_duplicates,
         },
@@ -366,6 +553,7 @@ def enrich_database(
             ],
             "synthetic_words": synthetic_words[:25],
             "missing_deck_entries_after_stubs": missing_deck_after_stubs[:25],
+            "xiehanzi_form_stubs": form_stats["created_entries"],
             "dropped_duplicates": dropped_duplicates[:25],
             "skipped_extra_duplicates": skipped_extra_duplicates[:25],
         },
