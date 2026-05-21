@@ -36,9 +36,9 @@ FIELDS = [
 ]
 
 TEMPLATE_FILES = {
-    "Meaning": (CARD_TEMPLATES_DIR / "Card 1/front.html", CARD_TEMPLATES_DIR / "Card 1/back.html"),
-    "Pinyin": (CARD_TEMPLATES_DIR / "Card 2/front.html", CARD_TEMPLATES_DIR / "Card 2/back.html"),
-    "Write": (CARD_TEMPLATES_DIR / "Card 5/front-xiehanzi-3.0.html", CARD_TEMPLATES_DIR / "Card 5/back.html"),
+    "Meaning": (CARD_TEMPLATES_DIR / "meaning/front.html", CARD_TEMPLATES_DIR / "meaning/back.html"),
+    "Pinyin": (CARD_TEMPLATES_DIR / "pinyin/front.html", CARD_TEMPLATES_DIR / "pinyin/back.html"),
+    "Write": (CARD_TEMPLATES_DIR / "write/front.html", CARD_TEMPLATES_DIR / "write/back.html"),
 }
 
 STATIC_MEDIA = [
