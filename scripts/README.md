@@ -1,12 +1,12 @@
 # Scripts
 
-These scripts are the current source-of-truth build pipeline for the custom
+These scripts are the current source-of-truth build pipeline for this fork's
 xiehanzi APKG.
 
 Run the full build with:
 
 ```sh
-nix-build --out-link result
+nix-build
 ```
 
 Pipeline stages:

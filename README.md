@@ -1,144 +1,113 @@
-# Anki xiě hànzì (写汉字)
+# Anki-xiehanzi Custom Deck Fork
 
-[Anki-xiehanzi](https://krmanik.github.io/Anki-xiehanzi)
+This repository is a personal fork of
+[krmanik/Anki-xiehanzi](https://github.com/krmanik/Anki-xiehanzi). The original
+project provides the upstream Anki-xiehanzi deck, website, and browser-based
+deck generator. This fork keeps the parts needed for my own Mandarin study deck
+and has diverged intentionally.
 
-Learn, read, write and practice Mandarin by drawing strokes in [Anki Desktop](https://apps.ankiweb.net/), [AnkiDroid](https://play.google.com/store/apps/details?id=com.ichi2.anki) and [AnkiMobile](https://apps.apple.com/us/app/ankimobile-flashcards/id373493387) with audio of HSK1 to HSK6 characters. 
+The current build produces one custom APKG:
 
-# Quick Start
+- `Anki-xiehanzi - New HSK (2025).apkg`
 
-## New HSK (2025-11)
+The filename is kept for compatibility with the inherited deck lineage, but the
+fork is focused on the current HSK 3.0 / 2026-oriented study setup rather than
+the older upstream deck matrix.
 
-Download HSK Anki apkg file for [Anki Desktop](https://apps.ankiweb.net/), [AnkiDroid](https://play.google.com/store/apps/details?id=com.ichi2.anki) or [AnkiMobile](https://apps.apple.com/us/app/ankimobile-flashcards/id373493387)
+## What Is Different
 
-### Download
+Compared with upstream, this fork currently:
 
-- [Anki-xiehanzi - New HSK (2025).apkg](https://github.com/krmanik/Anki-xiehanzi/releases/download/v2.3/Anki-xiehanzi.-.New.HSK.2025.apkg)
-- [Anki-xiehanzi - New HSK (2025) with sentences.apkg](https://github.com/krmanik/Anki-xiehanzi/releases/download/v2.3/Anki-xiehanzi.-.New.HSK.2025.with.sentences.apkg)
+- builds only the custom New HSK / HSK 3.0 deck, not the full upstream set of
+  deck variants;
+- removes sentence cards and the separate audio-only card type;
+- keeps Meaning, Pinyin, and Write cards;
+- defaults the templates to Simplified Chinese and Pinyin, with Traditional
+  characters and Zhuyin disabled;
+- adds a HanziWriter-based scoring panel for Write cards;
+- builds from a Python/Nix pipeline instead of the old website generator;
+- uses a compact CC-CEDICT-derived JSON database enriched with xiehanzi HSK
+  study targets;
+- checks the generated APKG against a pinned last-known-good hash by default.
 
-> **Note:** Before importing Anki Deck please make backups with scheduling information.
+This is not intended to remain a cleanly syncable fork of upstream. The upstream
+repository remains useful as historical reference and source attribution.
 
-<img src="https://raw.githubusercontent.com/krmanik/Anki-xiehanzi/main/static/img/xiehanzi_v2.0.gif" height="450px"></img>
+## Build
 
-# Features
-- Night mode
-- Change size of characters
-- Change drawing stroke width
-- New Deck with frequency order
-- Colored strokes and characters
-- Pinyin with tone color in HSK 3.0 decks
-- HSK1 - HSK9 audio included in the decks
-- View meaning by opening [Pleco dictionary](https://www.pleco.com/) on phone.
-- View character details using [https://hanzicraft.com/](https://hanzicraft.com/) 
-- View mnemonics of characters using [http://rtega.be/chmn/](http://rtega.be/chmn/)
-- Practice simplified as well as traditional characters
-- Show or hide Simplified, Traditional characters, Pinyin or Meaning
-- Draw characters to learn Mandarin with Simplified, Traditional, Pinyin and Meaning
-- Indicator at bottom for showing if character loaded or not (```green - loaded, red - not loaded or some error```)
-
-Note: Some changes will get reflect from next card.
-
-<br/>
-
-# View Previous Deck (2021-03)
-
-<details>
-
-<summary>Click to View</summary>
-
-## There are five types of Anki-xiehanzi deck.
-
-### Type 1 (Recommended)
-
-The deck contains separate decks for each types.
-1. Learn Strokes order of characters
-2. Learn Meaning of characters
-3. Learn Pinyin or Zhuyin of characters
-4. Learn Pronunciation using audio and Pinyin or Zhuyin
-
-> The deck is sorted in frequency order.
-
-[Download](https://ankiweb.net/shared/info/1351435439)
-
-### Type 2 (Recommended)
-
-The deck contains five card types in each HSK level notes.
-1. Learn Strokes order of characters
-2. Learn Meaning of characters
-3. Learn Pinyin or Zhuyin of characters
-4. Learn Pronunciation using audio and Pinyin or Zhuyin
-5. Learn Tone marks of characters 
-
-> The deck is sorted in frequency order.
-
-[Download](https://ankiweb.net/shared/info/239300382)
-
-### Type 3
-
-The deck contains five card types, but decks are sorted in alphabetical pinyin order.
-1. Learn strokes order of characters
-2. Learn meaning of characters
-3. Learn Pinyin or Zhuyin of characters
-4. Learn pronunciation using audio and Pinyin or Zhuyin
-5. Learn tone marks of characters 
-
-> This deck is **not** sorted in frequency order.
-
-[Download](https://ankiweb.net/shared/info/1063372083)
-
-### Type 4
-
-The deck contains notes with single note type <br>
-- Front side contains pinyin and meaning.
-- Back side contains writing component.
-
-> This deck is **not** sorted in frequency order.
-
-[Download](https://ankiweb.net/shared/info/536858343)
-
-### Type 5
-HSK 2.0 deck
-
-> This deck is **not** sorted in frequency order.
-
-[Download](https://ankiweb.net/shared/info/119943820)
-
-</details>
-
-## Custom APKG Build
-
-This fork builds the custom APKG from the repository inputs with Nix:
+Initialize submodules first:
 
 ```sh
-nix-build --out-link result
+git submodule update --init --recursive
 ```
 
-The Docusaurus website and browser-based deck generator have been removed from
-this fork. The APKG build path is the Python/Nix pipeline.
+Then build the APKG with Nix:
 
-## Acknowledgement
-I have not designed the writing chinese js library Hanziwriter. It comes from the awesome [Hanziwriter](https://hanziwriter.org) JavaScript library. 
+```sh
+nix-build
+```
 
-The chinese character and stroke order data used by [Hanziwriter](https://github.com/chanind/hanzi-writer)
-is derived from [ Make me a Hanzi](https://github.com/skishore/makemeahanzi).
-  
-## Disclaimer
- This implementation is in javascript. It works because Anki uses webview for flashcard review. It may not work on some devices. Please make backups of your decks with scheduling information before importing xiehanzi hsk decks.
- Some audio files missing but using a simple python script audio file can be generated using text to speech. [Read](https://github.com/krmanik/gtts-textToMp3)
+`nix-build` creates the default `result` symlink. The APKG and build reports are
+written there.
 
-## To create word list view this
-- [Anki Chinese Vocabulary Generator](https://github.com/krmanik/Anki-Chinese-Vocabulary-Generator)
-- [Vocabulary](https://simplezhongwen.blogspot.com/search/label/vocabulary)
+The default build is invariant: it verifies that the APKG hash still matches the
+pin in `deck_inputs/apkg_build_invariant.json`. If an intentional deck-output
+change is made, update that pin deliberately after reviewing the diff.
 
-## Contribute
- View [Contributing.md](https://github.com/krmanik/Anki-xiehanzi/blob/master/Contributing.md)
+## Repository Layout
 
-# My other anki decks
-[Anki Decks](https://ankiweb.net/shared/byauthor/119943820) 
+- `deck_inputs/`: committed source inputs for the deck build, including card
+  templates, deck config, the pinned CC-CEDICT snapshot, extra words, audio
+  inputs, and the HSK/xiehanzi word-list submodule.
+- `scripts/`: the Python source-of-truth build pipeline.
+- `_migrator-repo/`: Anki Debug Console migration tooling used to migrate an
+  existing local collection to the generated deck while preserving scheduling
+  state.
+- `.github/workflows/`: CI build workflow that runs the Nix build and uploads
+  artifacts.
 
-## License - Anki-xiehanzi (写汉字)
-Author : Mani (krmanik)
-<br>The MIT License
-<br>The GPL 3.0
+Generated JSON databases, reports, and APKGs should stay in build output
+directories such as `result`, not in the repository root.
 
-## Other Third Party License
-[License](https://github.com/krmanik/Anki-xiehanzi/blob/master/License.md)
+## Updating Source Data
+
+The normal build is offline and uses the committed CC-CEDICT snapshot. To update
+that snapshot intentionally, run:
+
+```sh
+nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
+```
+
+Then run `nix-build`, review the changed data and generated APKG, and commit the
+updated snapshot and hash pin only if the change is intended.
+
+## Safety
+
+Before importing or migrating Anki decks, make a full Anki backup.
+There is currently no generally usable migration path from upstream xie hanzi decks.
+
+## Acknowledgements
+
+This fork builds on the original
+[Anki-xiehanzi](https://github.com/krmanik/Anki-xiehanzi) project by Mani
+(`krmanik`).
+
+The writing component uses
+[HanziWriter](https://github.com/chanind/hanzi-writer). HanziWriter's character
+and stroke-order data is derived from
+[Make Me a Hanzi](https://github.com/skishore/makemeahanzi).
+
+The lexical base data uses a pinned
+[CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cedict) snapshot from
+MDBG. See `deck_inputs/cc-cedict/README.md` for snapshot details.
+
+## License
+
+This fork preserves the upstream license files and third-party license notices.
+See `License.md` and the license files in the vendored input directories.
+
+## AI-Generated Code Notice
+
+Some code and documentation in this fork was produced or edited with AI
+assistance. Human review is still required before trusting generated deck output
+or migration scripts.
