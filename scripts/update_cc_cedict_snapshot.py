@@ -4,10 +4,10 @@ Update the vendored CC-CEDICT snapshot.
 
 Usage:
 
-    python custom_update_cc_cedict_snapshot.py
+    python scripts/update_cc_cedict_snapshot.py
 
 The normal build is intentionally offline and reads the committed snapshot from
-third_party/cc-cedict. This script downloads the latest archive from the stable
+deck_inputs/cc-cedict. This script downloads the latest archive from the stable
 MDBG export URL, validates its structure, and refreshes the vendored ZIP,
 manifest, and README.
 """
@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_SOURCE_URL = "https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.zip"
-DEFAULT_VENDOR_DIR = Path("third_party/cc-cedict")
+DEFAULT_VENDOR_DIR = Path("deck_inputs/cc-cedict")
 DEFAULT_VENDOR_ZIP = DEFAULT_VENDOR_DIR / "cedict_1_0_ts_utf-8_mdbg.zip"
 DEFAULT_MANIFEST = DEFAULT_VENDOR_DIR / "snapshot.json"
 DEFAULT_README = DEFAULT_VENDOR_DIR / "README.md"
@@ -103,7 +103,7 @@ latest file during `nix-build`.
 To update the snapshot from the latest upstream export, run:
 
 ```sh
-nix-shell --run "python custom_update_cc_cedict_snapshot.py"
+nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
 ```
 
 The update command downloads the current archive from the URL below, validates

@@ -7,9 +7,9 @@ the work incremental.
 
 ## Build And Release
 
-- Add a GitHub Action that builds the custom APKG on every relevant commit and on
+- Keep the GitHub Action building the custom APKG on push, pull request, and
   manual dispatch.
-- Upload the generated deck and build report as workflow artifacts.
+- Keep generated decks and build reports available as workflow artifacts.
 - Later: publish release artifacts on tags.
 - Make sure the Action builds the deck with the default configuration.
 
@@ -23,10 +23,9 @@ the work incremental.
 
 ## Website
 
-- Remove the separate website if it is no longer useful.
-- If a website remains, simplify it dramatically.
-- Prefer a website that generates/edits generator configuration JSON instead of
-  carrying a second deck-generation path.
+- Keep the old Docusaurus/React website out of the active build path.
+- If a website returns later, make it a small configuration editor that emits
+  generator JSON instead of carrying a second deck-generation path.
 
 ## Data Model
 
@@ -62,9 +61,12 @@ the work incremental.
 
 - Use as few dependencies as practical.
 - Make dependencies deterministic.
-- Avoid mixing npm and Yarn long-term; prefer Nix plus one JavaScript package
-  manager, probably Yarn.
-- Keep lockfiles intentional and documented.
+- Keep JavaScript dependency management Yarn-only.
+- Keep `package.json` minimal and `yarn.lock` intentional.
+- Let Nix materialize Yarn dependencies via `fetchYarnDeps` for reproducible
+  builds.
+- Document why Python dependencies live in Nix while JavaScript dependencies use
+  `package.json` plus `yarn.lock`.
 
 ## Audio
 

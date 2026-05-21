@@ -14,7 +14,7 @@ needs, while keeping ingestion independent from APKG generation.
 
 Run from the repository root inside the Nix shell:
 
-    nix-shell --run "python custom_enrich_xiehanzi_db.py"
+    nix-shell --run "python scripts/enrich_xiehanzi_db.py"
 """
 
 from __future__ import annotations
@@ -34,8 +34,9 @@ from dragonmapper import transcriptions
 DEFAULT_MASTER_DB = Path("master_db_output/cc_cedict_master.json")
 DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
 DEFAULT_REPORT = Path("master_db_output/xiehanzi_enrichment_report.json")
-DEFAULT_HSK_DATA_DIR = Path("HSK-3.0-words-list/New HSK (2025)/Anki xiehanzi")
-DEFAULT_EXTRA_WORDS = Path("extra_words.tsv")
+DEFAULT_DECK_INPUTS_DIR = Path("deck_inputs")
+DEFAULT_HSK_DATA_DIR = DEFAULT_DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Anki xiehanzi"
+DEFAULT_EXTRA_WORDS = DEFAULT_DECK_INPUTS_DIR / "extra_words.tsv"
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
 XIEHANZI_FIELDS = [
@@ -346,9 +347,18 @@ def append_unique(values: list[str], new_values: list[str]) -> None:
         seen.add(value)
 
 
+def prefer_first(values: list[str], value: str) -> None:
+    if not value:
+        return
+    if value in values:
+        values.remove(value)
+    values.insert(0, value)
+
+
 def study_target_payload(entry: dict[str, Any]) -> dict[str, Any]:
     payload = dict(entry)
     payload.pop("simplified", None)
+    payload.pop("traditional", None)
     payload.pop("audio_filename", None)
     payload.pop("frequency", None)
     payload.pop("source", None)
@@ -433,7 +443,7 @@ def attach_deck_entries_to_words(
         xiehanzi.setdefault("frequency", entry["frequency"])
 
         form = find_or_create_xiehanzi_form(word, entry, form_stats)
-        append_unique(form.setdefault("traditional_variants", []), [entry["traditional"]])
+        prefer_first(form.setdefault("traditional_variants", []), entry["traditional"])
         append_unique(form.setdefault("tags", []), entry["tags"])
         form["tags"].sort()
         form_xiehanzi = form.setdefault("xiehanzi", {})

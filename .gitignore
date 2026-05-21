@@ -24,10 +24,12 @@ yarn-error.log*
 
 .yarn-cache
 .npm-cache/
-custom_generate_xiehanzi_report.json
-custom_generate_xiehanzi_from_enriched_report.json
+*generate_xiehanzi_report.json
+*generate_xiehanzi_from_enriched_report.json
+*generate_xiehanzi_build_verification.json
 source_comparison_output/
 master_db_output/
+build_reports/
 ci-artifacts/
 
 .backup

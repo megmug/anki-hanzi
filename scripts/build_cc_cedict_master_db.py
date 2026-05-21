@@ -21,7 +21,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-DEFAULT_SNAPSHOT_MANIFEST = Path("third_party/cc-cedict/snapshot.json")
+DEFAULT_SNAPSHOT_MANIFEST = Path("deck_inputs/cc-cedict/snapshot.json")
 DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_master.json")
 EXPECTED_ZIP_MEMBER = "cedict_ts.u8"
 

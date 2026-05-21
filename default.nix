@@ -68,8 +68,10 @@ let
           ".docusaurus"
           ".npm-cache"
           ".yarn-cache"
+          "_complete-hsk-vocabulary"
           "anki-xie-hanzi-2.2.1-to-2.3-migrator"
           "build"
+          "build_reports"
           "complete-hsk-vocabulary"
           "node_modules"
           "source_comparison_output"
@@ -80,6 +82,7 @@ let
           || rel == "result"
           || pkgs.lib.hasSuffix ".apkg" base
           || pkgs.lib.hasSuffix "_report.json" base
+          || pkgs.lib.hasSuffix "_build_verification.json" base
           || pkgs.lib.hasSuffix "_comparison.json" base;
       in
         !(pkgs.lib.any isUnder excludedDirs)
@@ -117,22 +120,22 @@ let
       export HOME="$TMPDIR/home"
       mkdir -p "$HOME"
 
-      python custom_build_cc_cedict_master_db.py
-      python custom_enrich_xiehanzi_db.py
+      python scripts/build_cc_cedict_master_db.py
+      python scripts/enrich_xiehanzi_db.py
 
       # Nix source paths use normalized mtimes that can predate ZIP's 1980
       # lower bound. Use the generator's fixed ZIP timestamp for all media
       # files materialized in this transitional store build.
       find . -type f -exec touch -t 202605200639.48 {} +
 
-      python custom_generate_xiehanzi_deck.py \
+      python scripts/generate_xiehanzi_deck.py \
         --timestamp 1779251987.6 \
         --zip-generated-datetime 2026-05-20T06:39:48
-      python custom_generate_xiehanzi_deck_from_enriched_db.py
-      python custom_verify_xiehanzi_apkg_build.py \
+      python scripts/generate_xiehanzi_deck_from_enriched_db.py
+      python scripts/verify_xiehanzi_apkg_build.py \
         --reference "Anki-xiehanzi - New HSK (2025).apkg" \
         --candidate "Anki-xiehanzi - New HSK (2025) from enriched.apkg" \
-        --output custom_generate_xiehanzi_build_verification.json
+        --output build_reports/generate_xiehanzi_build_verification.json
 
       runHook postBuild
     '';
@@ -143,9 +146,10 @@ let
       mkdir -p "$out"
       cp "Anki-xiehanzi - New HSK (2025).apkg" "$out/"
       cp "Anki-xiehanzi - New HSK (2025) from enriched.apkg" "$out/"
-      cp custom_generate_xiehanzi_report.json "$out/"
-      cp custom_generate_xiehanzi_from_enriched_report.json "$out/"
-      cp custom_generate_xiehanzi_build_verification.json "$out/"
+      cp build_reports/generate_xiehanzi_report.json "$out/"
+      cp build_reports/generate_xiehanzi_from_enriched_report.json "$out/"
+      cp build_reports/generate_xiehanzi_build_verification.json "$out/"
+      cp master_db_output/cc_cedict_xiehanzi_enriched.json "$out/"
       cp master_db_output/xiehanzi_enrichment_report.json "$out/"
 
       runHook postInstall

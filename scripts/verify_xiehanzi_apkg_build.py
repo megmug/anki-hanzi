@@ -147,6 +147,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     report = build_report(args.reference, args.candidate)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

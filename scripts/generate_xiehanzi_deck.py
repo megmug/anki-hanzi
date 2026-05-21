@@ -9,15 +9,15 @@ Differences from the notebook release build:
 - still packages audio files because the remaining card templates use `{{Audio}}`
 - generates missing audio with edge-tts, matching the notebook's voice
 - deduplicates HSK entries by Simplified + Pinyin, keeping the lowest HSK level
-- adds optional Extra entries from `extra_words.tsv`
+- adds optional Extra entries from `deck_inputs/extra_words.tsv`
 
-`extra_words.tsv` uses the same eight columns as the prepared HSK files:
+`deck_inputs/extra_words.tsv` uses the same eight columns as the prepared HSK files:
 Simplified, Traditional, Pinyin, Zhuyin, Level, PoS, Frequency, Meaning HTML.
-Generated/custom audio is cached in `extra_audio/cmn-<Simplified>.mp3`.
+Generated/custom audio is cached in `deck_inputs/extra_audio/cmn-<Simplified>.mp3`.
 
 Run from the repository root inside the Nix shell:
 
-    nix-shell --run "python custom_generate_xiehanzi_deck.py"
+    nix-shell --run "python scripts/generate_xiehanzi_deck.py"
 """
 
 from __future__ import annotations
@@ -40,11 +40,13 @@ import genanki
 
 DECK_ROOT = "Anki Xiehanzi - New HSK (2025)"
 OUTPUT_APKG = Path("Anki-xiehanzi - New HSK (2025).apkg")
-REPORT_PATH = Path("custom_generate_xiehanzi_report.json")
-HSK_DATA_DIR = Path("HSK-3.0-words-list/New HSK (2025)/Anki xiehanzi")
-AUDIO_DIR = Path("HSK-3.0-words-list/New HSK (2025)/Audio")
-EXTRA_AUDIO_DIR = Path("extra_audio")
-EXTRA_WORDS_PATH = Path("extra_words.tsv")
+REPORT_PATH = Path("build_reports/generate_xiehanzi_report.json")
+DECK_INPUTS_DIR = Path("deck_inputs")
+CARD_TEMPLATES_DIR = DECK_INPUTS_DIR / "card_templates"
+HSK_DATA_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Anki xiehanzi"
+AUDIO_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Audio"
+EXTRA_AUDIO_DIR = DECK_INPUTS_DIR / "extra_audio"
+EXTRA_WORDS_PATH = DECK_INPUTS_DIR / "extra_words.tsv"
 HANZI_WRITER_PACKAGE_JSON = Path("node_modules/hanzi-writer/package.json")
 HANZI_WRITER_BUNDLE = Path("node_modules/hanzi-writer/dist/hanzi-writer.min.js")
 VOICE = "zh-CN-XiaoxiaoNeural"
@@ -64,20 +66,20 @@ FIELDS = [
 ]
 
 TEMPLATE_FILES = {
-    "Meaning": ("card templates/Card 1/front.html", "card templates/Card 1/back.html"),
-    "Pinyin": ("card templates/Card 2/front.html", "card templates/Card 2/back.html"),
-    "Write": ("card templates/Card 5/front-xiehanzi-3.0.html", "card templates/Card 5/back.html"),
+    "Meaning": (CARD_TEMPLATES_DIR / "Card 1/front.html", CARD_TEMPLATES_DIR / "Card 1/back.html"),
+    "Pinyin": (CARD_TEMPLATES_DIR / "Card 2/front.html", CARD_TEMPLATES_DIR / "Card 2/back.html"),
+    "Write": (CARD_TEMPLATES_DIR / "Card 5/front-xiehanzi-3.0.html", CARD_TEMPLATES_DIR / "Card 5/back.html"),
 }
 
 STATIC_MEDIA = [
-    "card templates/fonts/_MaterialIcons-Regular.woff",
-    "card templates/fonts/_MaterialIcons-Regular.woff2",
-    "card templates/files/_pleco.png",
-    "card templates/files/_youdao.png",
-    "card templates/files/_rtega.png",
-    "card templates/files/_tatoeba.png",
-    "card templates/files/_hanzicraft.png",
-    "card templates/files/_characterpop.svg",
+    str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff"),
+    str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff2"),
+    str(CARD_TEMPLATES_DIR / "files/_pleco.png"),
+    str(CARD_TEMPLATES_DIR / "files/_youdao.png"),
+    str(CARD_TEMPLATES_DIR / "files/_rtega.png"),
+    str(CARD_TEMPLATES_DIR / "files/_tatoeba.png"),
+    str(CARD_TEMPLATES_DIR / "files/_hanzicraft.png"),
+    str(CARD_TEMPLATES_DIR / "files/_characterpop.svg"),
 ]
 
 
@@ -256,7 +258,7 @@ def load_extra_entries(hsk_keys: set[tuple[str, str]]) -> tuple[list[WordEntry],
 
 
 def create_models() -> dict[str, genanki.Model]:
-    css = read_text("card templates/styling-xiehanzi-3.0.css")
+    css = read_text(CARD_TEMPLATES_DIR / "styling-xiehanzi-3.0.css")
     models: dict[str, genanki.Model] = {}
 
     for card_type in CARD_TYPES:
@@ -533,6 +535,7 @@ def main() -> None:
         "timestamp": args.timestamp,
         "zip_generated_datetime": args.zip_generated_datetime,
     }
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",

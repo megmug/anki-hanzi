@@ -4,7 +4,7 @@
 Build the customized xiehanzi APKG from the enriched JSON database.
 
 This is a reproduction generator. It should produce the same deck content as
-`custom_generate_xiehanzi_deck.py`, but it must read word/card data only from
+`scripts/generate_xiehanzi_deck.py`, but it must read word/card data only from
 `master_db_output/cc_cedict_xiehanzi_enriched.json`.
 
 The older TSV-based generator intentionally remains unchanged as the reference
@@ -12,7 +12,7 @@ implementation until this generator can reproduce it.
 
 Run from the repository root inside the Nix shell:
 
-    nix-shell --run "python custom_generate_xiehanzi_deck_from_enriched_db.py"
+    nix-shell --run "python scripts/generate_xiehanzi_deck_from_enriched_db.py"
 """
 
 from __future__ import annotations
@@ -28,12 +28,12 @@ from typing import Any
 import edge_tts
 import genanki
 
-import custom_generate_xiehanzi_deck as reference
+import generate_xiehanzi_deck as reference
 
 
 DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
 DEFAULT_OUTPUT_APKG = Path("Anki-xiehanzi - New HSK (2025) from enriched.apkg")
-DEFAULT_REPORT_PATH = Path("custom_generate_xiehanzi_from_enriched_report.json")
+DEFAULT_REPORT_PATH = Path("build_reports/generate_xiehanzi_from_enriched_report.json")
 DEFAULT_GENANKI_TIMESTAMP = 1779251987.6
 DEFAULT_GENERATED_ZIP_DATETIME = (2026, 5, 20, 6, 39, 48)
 DEFAULT_ZIP_DATETIME = (1980, 1, 1, 0, 0, 0)
@@ -80,20 +80,32 @@ def load_enriched_entries(enriched_db_path: Path) -> tuple[dict[str, list[Enrich
         xiehanzi = word.get("xiehanzi") or {}
         frequency = xiehanzi.get("frequency")
         form_entries = [
-            raw_entry
+            (form, raw_entry)
             for form in word.get("forms", [])
             for raw_entry in (
                 (form.get("xiehanzi") or {}).get("study_targets")
                 or (form.get("xiehanzi") or {}).get("deck_entries", [])
             )
         ]
-        raw_entries = form_entries or xiehanzi.get("study_targets", []) or xiehanzi.get("deck_entries", [])
+        raw_entries = form_entries or [
+            (None, raw_entry)
+            for raw_entry in (xiehanzi.get("study_targets", []) or xiehanzi.get("deck_entries", []))
+        ]
 
-        for raw_entry in raw_entries:
+        for form, raw_entry in raw_entries:
             deck_level = str(raw_entry["deck_level"])
+            traditional = raw_entry.get("traditional")
+            if traditional is None:
+                variants = []
+                if form is not None:
+                    variants = form.get("traditional_variants") or []
+                if not variants:
+                    variants = word.get("traditional_variants") or []
+                traditional = variants[0] if variants else simplified
+
             entry = EnrichedWordEntry(
                 simplified=simplified,
-                traditional=str(raw_entry["traditional"]),
+                traditional=str(traditional),
                 pinyin=str(raw_entry["pinyin"]),
                 zhuyin=str(raw_entry["zhuyin"]),
                 level=str(raw_entry["raw_level"]),
@@ -325,6 +337,7 @@ def build_package(
         "missing_audio_files": missing_audio,
         "hsk_counts": {level: len(hsk_entries[level]) for level in reference.LEVELS},
     }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",

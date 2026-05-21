@@ -1,54 +1,75 @@
-# License
-### HanziWriter
+# License and Third-Party Notices
+
+This file is the central license and attribution notice for this fork. It keeps
+the upstream Anki-xiehanzi notices together with the licenses for data,
+templates, media, fonts, and bundled JavaScript assets.
+
+`ARPHICPL.TXT` is kept as a separate, unmodified copy of the Arphic Public
+License because Arphic-licensed font/data material requires the license file to
+be retained verbatim.
+
+## HanziWriter
+
 https://hanziwriter.org/docs.html
 
 The Hanzi Writer source code is released under terms of the MIT license. The MIT License is simple and easy to understand and it places almost no restrictions on what you can do with the Project. You are free to use the Project in any other project (even commercial projects) as long as the copyright header is left intact.
 
-The Hanzi Writer data comes from the [Make Me A Hanzi](https://github.com/skishore/makemeahanzi) project, which extracted the data from fonts by Arphic Technology, a Taiwanese font forge that released their work under a permissive license in 1999. You can redistribute and/or modify this data under the terms of the Arphic Public License as published by Arphic Technology Co., Ltd. A copy of this license can be found in  [ARPHICPL.TXT](https://github.com/krmanik/Anki-xiehanzi/blob/master/ARPHICPL.TXT).
+The Hanzi Writer data comes from the [Make Me A Hanzi](https://github.com/skishore/makemeahanzi) project, which extracted the data from fonts by Arphic Technology, a Taiwanese font forge that released their work under a permissive license in 1999. You can redistribute and/or modify this data under the terms of the Arphic Public License as published by Arphic Technology Co., Ltd. A copy of this license is included in this repository as `ARPHICPL.TXT`.
 
-### HSK 3.0 Words list
+## HSK 3.0 Words List
+
 MIT License<br>
 https://plecoforums.com/threads/hsk-3-0-flashcards.6706/<br>
 https://github.com/krmanik/HSK-3.0-words-list
 
-### New HSK Word Lists
+## New HSK Word Lists
+
 Copyright Alan Davies, alan@hskhsk.com 2013-2020
 Free to be copied, distributed, or modified for non-commercial use.
 http://www.hskhsk.com/word-lists.html
 
-### Make Me a Hanzi
+## Make Me a Hanzi
+
 Copyright 1999 Arphic Technology Co., Ltd.; Copyright 2016 Shaunak Kishore.
 Licensed under the Arphic Public License.
 https://github.com/skishore/makemeahanzi
 
-### Arphic PL KaitiM GB and UKai
+## Arphic PL KaitiM GB and UKai
+
 Copyright 1999 Arphic Technology Co., Ltd.
 Licensed under the Arphic Public License.
 http://www.arphic.com.tw/en/home/index
 
-### audio-cmn (HSK1 - HSK6 Audio)
+## audio-cmn (HSK1 - HSK6 Audio)
+
 hugolpz CC-by-sa
 https://github.com/hugolpz/audio-cmn
 
-### Free Audio Collection of Chinese Words (Mandarins) registered by the University of Caen
+## Free Audio Collection of Chinese Words (Mandarins) Registered by the University of Caen
+
 Copyright (c) 2009 Yue Tan 
 http://packs.shtooka.net/cmn-caen-tan/readme.txt
 
-### Button tap audio and Other Audio
+## Button Tap Audio and Other Audio
+
 License: Standard License
 Sound effects obtained from https://www.zapsplat.com
 <br>https://freesfx.co.uk/sfx/Click
-### Anki Persistence
+
+## Anki Persistence
+
 MIT License
 Copyright (c) 2018 Simon Lammer.
 <br>https://github.com/SimonLammer/anki-persistence
 
-### Google Material Design Icons
+## Google Material Design Icons
+
 Apache License
 Version 2.0, January 2004
 https://github.com/google/material-design-icons
 
-### Logo icons
+## Logo Icons
+
 - Pleco
 <br>Copyright © 2020 Pleco Inc.
 <br>[Pleco](https://www.pleco.com/)
@@ -61,27 +82,33 @@ https://github.com/google/material-design-icons
 <br>2010-2019 © Reinaert Albrecht
 <br>[Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.](https://creativecommons.org/licenses/by-nc-sa/3.0/)
 
-### Sidebar, Switch and Range slider
+## Sidebar, Switch and Range Slider
+
 <a href="https://www.w3schools.com/">W3Schools.com</a>
 <br>Copyright 1999-2020 by Refsnes Data
 
-### Sidebar components
+## Sidebar Components
+
 [gui-challenges](https://github.com/argyleink/gui-challenges)<br/>
 [building-a-settings-component](https://web.dev/building-a-settings-component/)
 [Apache-2.0 license](https://github.com/argyleink/gui-challenges/blob/main/LICENSE)
 
-### Button CSS
+## Button CSS
+
 I used css for button from following codepen.
 <br>https://codepen.io/sebj54/pen/oxluI
 
-### Earlier I asked questions on Stackoverflow for showing character one by one
+## Earlier Stack Overflow Question About Showing One Character at a Time
+
 I asked this question on Stackoverflow for my project in Cordova.
 <br>https://stackoverflow.com/questions/60285131/i-want-one-character-at-a-time-on-html-page-after-completion-load-next-one
 <br>[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
-# License - Anki-xiehanzi (写汉字)
+## Anki-xiehanzi (写汉字)
+
 Author : Mani (krmanik)
 <br>MIT License 2020
+<br>GPL 3.0 2022
 
 The MIT License
 Permission is hereby granted, free of charge, to any person obtaining a copy

@@ -10,7 +10,7 @@ latest file during `nix-build`.
 To update the snapshot from the latest upstream export, run:
 
 ```sh
-nix-shell --run "python custom_update_cc_cedict_snapshot.py"
+nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
 ```
 
 The update command downloads the current archive from the URL below, validates
