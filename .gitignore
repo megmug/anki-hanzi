@@ -25,8 +25,7 @@ yarn-error.log*
 .yarn-cache
 .npm-cache/
 *generate_xiehanzi_report.json
-*generate_xiehanzi_from_enriched_report.json
-*generate_xiehanzi_build_verification.json
+*generate_xiehanzi_hash_verification.json
 source_comparison_output/
 master_db_output/
 build_reports/
@@ -36,5 +35,4 @@ ci-artifacts/
 .config
 
 Anki-xiehanzi - New HSK (2025).apkg
-Anki-xiehanzi - New HSK (2025) from enriched.apkg
 Anki-xiehanzi - New HSK (2025) with sentences.apkg

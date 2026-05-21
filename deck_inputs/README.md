@@ -17,6 +17,8 @@ should stay outside this directory.
 - `deck_config.json`: first-pass deck selection config. It selects which
   enriched xiehanzi study targets become generated notes, such as all HSK
   levels plus specific extra Simplified words.
+- `apkg_build_invariant.json`: last-known-good APKG size and SHA256 used by the
+  default invariant build.
 - `extra_audio/`: committed/generated custom audio files for extra entries.
 - `card_templates/`: Anki card HTML/CSS templates and static media packaged
   into the APKG.

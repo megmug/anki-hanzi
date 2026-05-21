@@ -3,9 +3,12 @@
     ref = "nixos-25.11";
     rev = "d7a713c0b7e47c908258e71cba7a2d77cc8d71d5";
 } ) {}
+, enforceApkgHash ? true
 }:
 
 let
+  apkgHashMode = if enforceApkgHash then "enforce" else "record";
+
   colorize-pinyin = pkgs.python3Packages.buildPythonPackage rec {
     pname = "colorize-pinyin";
     version = "2.1.1";
@@ -82,7 +85,7 @@ let
           || rel == "result"
           || pkgs.lib.hasSuffix ".apkg" base
           || pkgs.lib.hasSuffix "_report.json" base
-          || pkgs.lib.hasSuffix "_build_verification.json" base
+          || pkgs.lib.hasSuffix "_hash_verification.json" base
           || pkgs.lib.hasSuffix "_comparison.json" base;
       in
         !(pkgs.lib.any isUnder excludedDirs)
@@ -131,11 +134,11 @@ let
       python scripts/generate_xiehanzi_deck.py \
         --timestamp 1779251987.6 \
         --zip-generated-datetime 2026-05-20T06:39:48
-      python scripts/generate_xiehanzi_deck_from_enriched_db.py
-      python scripts/verify_xiehanzi_apkg_build.py \
-        --reference "Anki-xiehanzi - New HSK (2025).apkg" \
-        --candidate "Anki-xiehanzi - New HSK (2025) from enriched.apkg" \
-        --output build_reports/generate_xiehanzi_build_verification.json
+      python scripts/verify_apkg_hash.py \
+        --apkg "Anki-xiehanzi - New HSK (2025).apkg" \
+        --pin deck_inputs/apkg_build_invariant.json \
+        --output build_reports/generate_xiehanzi_hash_verification.json \
+        --mode ${apkgHashMode}
 
       runHook postBuild
     '';
@@ -145,10 +148,8 @@ let
 
       mkdir -p "$out"
       cp "Anki-xiehanzi - New HSK (2025).apkg" "$out/"
-      cp "Anki-xiehanzi - New HSK (2025) from enriched.apkg" "$out/"
       cp build_reports/generate_xiehanzi_report.json "$out/"
-      cp build_reports/generate_xiehanzi_from_enriched_report.json "$out/"
-      cp build_reports/generate_xiehanzi_build_verification.json "$out/"
+      cp build_reports/generate_xiehanzi_hash_verification.json "$out/"
       cp master_db_output/cc_cedict_xiehanzi_enriched.json "$out/"
       cp master_db_output/xiehanzi_enrichment_report.json "$out/"
 

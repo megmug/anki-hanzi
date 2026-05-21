@@ -1,19 +1,16 @@
 #!/usr/bin/env python
 
 """
-Build a customized xiehanzi APKG from the prepared New HSK (2025) word files.
+Build the customized xiehanzi APKG from the enriched JSON database.
 
-Differences from the notebook release build:
-- does not generate Audio cards/decks
-- keeps Meaning, Pinyin, and Write cards
-- still packages audio files because the remaining card templates use `{{Audio}}`
-- generates missing audio with edge-tts, matching the notebook's voice
-- deduplicates HSK entries by Simplified + Pinyin, keeping the lowest HSK level
-- adds optional Extra entries from `deck_inputs/extra_words.tsv`
+The generator reads word/card data from
+`master_db_output/cc_cedict_xiehanzi_enriched.json` and uses the shared deck
+build helpers in `scripts/deck_build_common.py` for templates, media, and stable
+Anki ids.
 
-`deck_inputs/extra_words.tsv` uses the same eight columns as the prepared HSK files:
-Simplified, Traditional, Pinyin, Zhuyin, Level, PoS, Frequency, Meaning HTML.
-Generated/custom audio is cached in `deck_inputs/extra_audio/cmn-<Simplified>.mp3`.
+`deck_inputs/deck_config.json` controls which enriched xiehanzi study targets
+are emitted as notes. This first config layer selects target words only; card
+types are still the fixed Meaning, Pinyin, and Write set.
 
 Run from the repository root inside the Nix shell:
 
@@ -23,68 +20,31 @@ Run from the repository root inside the Nix shell:
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
-import html
 import json
-import re
 import tempfile
-import unicodedata
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import edge_tts
 import genanki
 
+import deck_build_common as common
 
-DECK_ROOT = "Anki Xiehanzi - New HSK (2025)"
-OUTPUT_APKG = Path("Anki-xiehanzi - New HSK (2025).apkg")
-REPORT_PATH = Path("build_reports/generate_xiehanzi_report.json")
-DECK_INPUTS_DIR = Path("deck_inputs")
-CARD_TEMPLATES_DIR = DECK_INPUTS_DIR / "card_templates"
-HSK_DATA_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Anki xiehanzi"
-AUDIO_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Audio"
-EXTRA_AUDIO_DIR = DECK_INPUTS_DIR / "extra_audio"
-EXTRA_WORDS_PATH = DECK_INPUTS_DIR / "extra_words.tsv"
-HANZI_WRITER_PACKAGE_JSON = Path("node_modules/hanzi-writer/package.json")
-HANZI_WRITER_BUNDLE = Path("node_modules/hanzi-writer/dist/hanzi-writer.min.js")
-VOICE = "zh-CN-XiaoxiaoNeural"
+
+DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
+DEFAULT_DECK_CONFIG = Path("deck_inputs/deck_config.json")
+DEFAULT_OUTPUT_APKG = common.OUTPUT_APKG
+DEFAULT_REPORT_PATH = Path("build_reports/generate_xiehanzi_report.json")
+DEFAULT_GENANKI_TIMESTAMP = 1779251987.6
+DEFAULT_GENERATED_ZIP_DATETIME = (2026, 5, 20, 6, 39, 48)
+DEFAULT_ZIP_DATETIME = (1980, 1, 1, 0, 0, 0)
 GENERATED_ZIP_MEMBERS = {"collection.anki2", "media"}
-
-LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
-CARD_TYPES = ["Meaning", "Pinyin", "Write"]
-
-FIELDS = [
-    {"name": "Simplified"},
-    {"name": "Traditional"},
-    {"name": "Pinyin"},
-    {"name": "Zhuyin"},
-    {"name": "PoS"},
-    {"name": "Meaning"},
-    {"name": "Audio"},
-]
-
-TEMPLATE_FILES = {
-    "Meaning": (CARD_TEMPLATES_DIR / "Card 1/front.html", CARD_TEMPLATES_DIR / "Card 1/back.html"),
-    "Pinyin": (CARD_TEMPLATES_DIR / "Card 2/front.html", CARD_TEMPLATES_DIR / "Card 2/back.html"),
-    "Write": (CARD_TEMPLATES_DIR / "Card 5/front-xiehanzi-3.0.html", CARD_TEMPLATES_DIR / "Card 5/back.html"),
-}
-
-STATIC_MEDIA = [
-    str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff"),
-    str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff2"),
-    str(CARD_TEMPLATES_DIR / "files/_pleco.png"),
-    str(CARD_TEMPLATES_DIR / "files/_youdao.png"),
-    str(CARD_TEMPLATES_DIR / "files/_rtega.png"),
-    str(CARD_TEMPLATES_DIR / "files/_tatoeba.png"),
-    str(CARD_TEMPLATES_DIR / "files/_hanzicraft.png"),
-    str(CARD_TEMPLATES_DIR / "files/_characterpop.svg"),
-]
 
 
 @dataclass(frozen=True)
-class WordEntry:
+class EnrichedWordEntry:
     simplified: str
     traditional: str
     pinyin: str
@@ -94,14 +54,12 @@ class WordEntry:
     frequency: str
     definition_html: str
     source: str
+    audio_filename: str
+    deck_order: int
 
     @property
     def audio_ref(self) -> str:
-        return f"[sound:cmn-{self.simplified}.mp3]"
-
-    @property
-    def audio_path(self) -> Path:
-        return AUDIO_DIR / f"cmn-{self.simplified}.mp3"
+        return f"[sound:{self.audio_filename}]"
 
     def fields(self) -> list[str]:
         return [
@@ -115,198 +73,123 @@ class WordEntry:
         ]
 
 
-def stable_id(label: str) -> int:
-    digest = hashlib.sha256(label.encode("utf-8")).digest()
-    return (int.from_bytes(digest[:4], "big") % (1 << 30)) + (1 << 30)
+@dataclass(frozen=True)
+class DeckSelection:
+    hsk_levels: tuple[str, ...]
+    additional_simplified: frozenset[str]
+    include_all_extra: bool
+    config_path: str | None
+    config_found: bool
+
+    def report(self) -> dict[str, Any]:
+        return {
+            "config_path": self.config_path,
+            "config_found": self.config_found,
+            "hsk_levels": list(self.hsk_levels),
+            "additional_simplified": sorted(self.additional_simplified),
+            "include_all_extra": self.include_all_extra,
+        }
 
 
-def read_text(path: str | Path) -> str:
-    return Path(path).read_text(encoding="utf-8")
+def normalize_simplified(value: Any) -> str:
+    return str(value or "").strip()
 
 
-def read_hanzi_writer_package_version() -> str:
-    package_data = json.loads(HANZI_WRITER_PACKAGE_JSON.read_text(encoding="utf-8"))
-    return str(package_data["version"])
+def parse_hsk_levels(raw_levels: Any) -> tuple[str, ...]:
+    if raw_levels is None or raw_levels == "all":
+        return tuple(common.LEVELS)
+
+    if isinstance(raw_levels, str):
+        raw_levels = [raw_levels]
+
+    if not isinstance(raw_levels, list):
+        raise ValueError("deck config selection.hsk_levels must be \"all\" or a list")
+
+    levels: list[str] = []
+    for raw_level in raw_levels:
+        level = str(raw_level).strip()
+        if level == "all":
+            return tuple(common.LEVELS)
+        if level not in common.LEVELS:
+            raise ValueError(f"unknown HSK level in deck config: {level}")
+        if level not in levels:
+            levels.append(level)
+
+    return tuple(levels)
 
 
-def read_hanzi_writer_bundle() -> str:
-    version = read_hanzi_writer_package_version()
-    bundle = HANZI_WRITER_BUNDLE.read_text(encoding="utf-8").strip()
-    return "\n".join([
-        f"/*! Hanzi Writer v{version} injected from npm package */",
-        bundle,
-    ])
-
-
-def inject_hanzi_writer_bundle(template: str) -> str:
-    start_marker = "    /*! Hanzi Writer v"
-    script_start = template.find(start_marker)
-    if script_start < 0:
-        raise ValueError("Could not find embedded Hanzi Writer bundle start marker")
-
-    script_end_marker = "\n</script>"
-    script_end = template.find(script_end_marker, script_start)
-    if script_end < 0:
-        raise ValueError("Could not find embedded Hanzi Writer bundle end marker")
-
-    injected_bundle = read_hanzi_writer_bundle()
-    indented_bundle = "\n".join(
-        f"    {line}" if line else ""
-        for line in injected_bundle.splitlines()
+def parse_simplified_list(value: Any, field_name: str) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if not isinstance(value, list):
+        raise ValueError(f"deck config selection.{field_name} must be a list")
+    return frozenset(
+        simplified
+        for simplified in (normalize_simplified(item) for item in value)
+        if simplified
     )
-    return template[:script_start] + indented_bundle + template[script_end:]
 
 
-def read_template(card_type: str, path: str | Path) -> str:
-    template = read_text(path)
-    if card_type == "Write":
-        return inject_hanzi_writer_bundle(template)
-    return template
-
-
-def normalize_field(value: str) -> str:
-    value = html.unescape(value or "")
-    value = re.sub(r"<[^>]+>", " ", value)
-    value = unicodedata.normalize("NFC", value)
-    return re.sub(r"\s+", "", value).strip().lower()
-
-
-def dedupe_key(entry: WordEntry) -> tuple[str, str]:
-    return normalize_field(entry.simplified), normalize_field(entry.pinyin)
-
-
-def read_word_file(path: Path, source: str) -> list[WordEntry]:
-    entries: list[WordEntry] = []
-    with path.open(encoding="utf-8", newline="") as handle:
-        for row in csv.reader(handle, delimiter="\t"):
-            if not row:
-                continue
-            if row[0].startswith("#"):
-                continue
-            if len(row) < 8:
-                raise ValueError(f"Expected at least 8 TSV columns in {path}, got {len(row)}: {row!r}")
-            entries.append(
-                WordEntry(
-                    simplified=row[0],
-                    traditional=row[1],
-                    pinyin=row[2],
-                    zhuyin=row[3],
-                    level=row[4],
-                    pos=row[5],
-                    frequency=row[6],
-                    definition_html=row[7],
-                    source=source,
-                )
-            )
-    return entries
-
-
-def load_hsk_entries() -> tuple[dict[str, list[WordEntry]], set[tuple[str, str]], list[dict[str, str]]]:
-    kept_by_key: dict[tuple[str, str], WordEntry] = {}
-    kept_by_level: dict[str, list[WordEntry]] = {level: [] for level in LEVELS}
-    dropped_duplicates: list[dict[str, str]] = []
-
-    for level in LEVELS:
-        path = HSK_DATA_DIR / f"HSK_Level_{level}.txt"
-        for entry in read_word_file(path, source=f"HSK {level}"):
-            key = dedupe_key(entry)
-            existing = kept_by_key.get(key)
-            if existing:
-                dropped_duplicates.append(
-                    {
-                        "simplified": entry.simplified,
-                        "pinyin": entry.pinyin,
-                        "dropped_source": entry.source,
-                        "dropped_level": entry.level,
-                        "kept_source": existing.source,
-                        "kept_level": existing.level,
-                        "dropped_pinyin": entry.pinyin,
-                        "kept_pinyin": existing.pinyin,
-                    }
-                )
-                continue
-            kept_by_key[key] = entry
-            kept_by_level[level].append(entry)
-
-    return kept_by_level, set(kept_by_key), dropped_duplicates
-
-
-def load_extra_entries(hsk_keys: set[tuple[str, str]]) -> tuple[list[WordEntry], list[dict[str, str]]]:
-    if not EXTRA_WORDS_PATH.exists():
-        return [], []
-
-    entries: list[WordEntry] = []
-    skipped_duplicates: list[dict[str, str]] = []
-    seen_extra_keys: set[tuple[str, str]] = set()
-
-    for entry in read_word_file(EXTRA_WORDS_PATH, source="Extra"):
-        key = dedupe_key(entry)
-        if key in hsk_keys or key in seen_extra_keys:
-            skipped_duplicates.append(
-                {
-                    "simplified": entry.simplified,
-                    "pinyin": entry.pinyin,
-                    "level": entry.level,
-                    "reason": "already present in HSK data" if key in hsk_keys else "duplicate Extra entry",
-                }
-            )
-            continue
-        seen_extra_keys.add(key)
-        entries.append(entry)
-
-    return entries, skipped_duplicates
-
-
-def create_models() -> dict[str, genanki.Model]:
-    css = read_text(CARD_TEMPLATES_DIR / "styling-xiehanzi-3.0.css")
-    models: dict[str, genanki.Model] = {}
-
-    for card_type in CARD_TYPES:
-        front_path, back_path = TEMPLATE_FILES[card_type]
-        model_name = f"Basic - New HSK (2025) - {card_type.lower()}"
-        models[card_type] = genanki.Model(
-            model_id=stable_id(f"model:{model_name}"),
-            name=model_name,
-            fields=FIELDS,
-            templates=[
-                {
-                    "name": f"Card 1 - {card_type}",
-                    "qfmt": read_template(card_type, front_path),
-                    "afmt": read_text(back_path),
-                }
-            ],
-            css=css,
+def load_deck_selection(config_path: Path | None) -> DeckSelection:
+    if config_path is None or not config_path.exists():
+        return DeckSelection(
+            hsk_levels=tuple(common.LEVELS),
+            additional_simplified=frozenset(),
+            include_all_extra=True,
+            config_path=str(config_path) if config_path is not None else None,
+            config_found=False,
         )
 
-    return models
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    selection = config.get("selection", config)
+    if not isinstance(selection, dict):
+        raise ValueError("deck config selection must be an object")
+
+    return DeckSelection(
+        hsk_levels=parse_hsk_levels(selection.get("hsk_levels", "all")),
+        additional_simplified=parse_simplified_list(
+            selection.get("additional_simplified", []),
+            "additional_simplified",
+        ),
+        include_all_extra=bool(selection.get("include_all_extra", False)),
+        config_path=str(config_path),
+        config_found=True,
+    )
 
 
-def create_deck(deck_name: str, model: genanki.Model, entries: list[WordEntry]) -> genanki.Deck:
-    deck = genanki.Deck(stable_id(f"deck:{deck_name}"), deck_name)
-    for entry in entries:
-        deck.add_note(genanki.Note(model=model, fields=entry.fields()))
-    return deck
+def should_include_target(simplified: str, deck_level: str, selection: DeckSelection) -> bool:
+    if deck_level in selection.hsk_levels:
+        return True
+    if simplified in selection.additional_simplified:
+        return True
+    return deck_level == "Extra" and selection.include_all_extra
 
 
-def build_decks(models: dict[str, genanki.Model], hsk_entries: dict[str, list[WordEntry]], extra_entries: list[WordEntry]) -> list[genanki.Deck]:
+def build_decks(
+    models: dict[str, genanki.Model],
+    hsk_entries: dict[str, list[EnrichedWordEntry]],
+    extra_entries: list[EnrichedWordEntry],
+) -> list[genanki.Deck]:
     decks: list[genanki.Deck] = []
 
-    for level in LEVELS:
+    for level in common.LEVELS:
         entries = hsk_entries[level]
-        for card_type in CARD_TYPES:
+        if not entries:
+            continue
+        for card_type in common.CARD_TYPES:
             decks.append(
-                create_deck(
-                    deck_name=f"{DECK_ROOT}::HSK {level}::{card_type}",
+                common.create_deck(
+                    deck_name=f"{common.DECK_ROOT}::HSK {level}::{card_type}",
                     model=models[card_type],
                     entries=entries,
                 )
             )
 
     if extra_entries:
-        for card_type in CARD_TYPES:
+        for card_type in common.CARD_TYPES:
             decks.append(
-                create_deck(
-                    deck_name=f"{DECK_ROOT}::Extra::{card_type}",
+                common.create_deck(
+                    deck_name=f"{common.DECK_ROOT}::Extra::{card_type}",
                     model=models[card_type],
                     entries=extra_entries,
                 )
@@ -315,10 +198,89 @@ def build_decks(models: dict[str, genanki.Model], hsk_entries: dict[str, list[Wo
     return decks
 
 
-def find_audio_path(entry: WordEntry) -> Path | None:
+def load_enriched_entries(
+    enriched_db_path: Path,
+    selection: DeckSelection,
+) -> tuple[dict[str, list[EnrichedWordEntry]], list[EnrichedWordEntry], dict[str, Any], dict[str, Any]]:
+    database = json.loads(enriched_db_path.read_text(encoding="utf-8"))
+    by_level: dict[str, list[EnrichedWordEntry]] = {level: [] for level in common.LEVELS}
+    extra_entries: list[EnrichedWordEntry] = []
+    matched_additional_simplified: set[str] = set()
+    skipped_targets = 0
+
+    for word in database.get("words", []):
+        simplified = normalize_simplified(word["simplified"])
+        xiehanzi = word.get("xiehanzi") or {}
+        frequency = xiehanzi.get("frequency")
+        form_entries = [
+            (form, raw_entry)
+            for form in word.get("forms", [])
+            for raw_entry in (
+                (form.get("xiehanzi") or {}).get("study_targets")
+                or (form.get("xiehanzi") or {}).get("deck_entries", [])
+            )
+        ]
+        raw_entries = form_entries or [
+            (None, raw_entry)
+            for raw_entry in (xiehanzi.get("study_targets", []) or xiehanzi.get("deck_entries", []))
+        ]
+
+        for form, raw_entry in raw_entries:
+            deck_level = str(raw_entry["deck_level"])
+            if not should_include_target(simplified, deck_level, selection):
+                skipped_targets += 1
+                continue
+
+            if simplified in selection.additional_simplified:
+                matched_additional_simplified.add(simplified)
+
+            traditional = raw_entry.get("traditional")
+            if traditional is None:
+                variants = []
+                if form is not None:
+                    variants = form.get("traditional_variants") or []
+                if not variants:
+                    variants = word.get("traditional_variants") or []
+                traditional = variants[0] if variants else simplified
+
+            entry = EnrichedWordEntry(
+                simplified=simplified,
+                traditional=str(traditional),
+                pinyin=str(raw_entry["pinyin"]),
+                zhuyin=str(raw_entry["zhuyin"]),
+                level=str(raw_entry["raw_level"]),
+                pos=str(raw_entry["pos"]),
+                frequency="" if frequency is None else str(frequency),
+                definition_html=str(raw_entry["meaning_html"]),
+                source="Extra" if deck_level == "Extra" else f"HSK {deck_level}",
+                audio_filename=f"cmn-{simplified}.mp3",
+                deck_order=int(raw_entry["deck_order"]),
+            )
+
+            if deck_level == "Extra":
+                extra_entries.append(entry)
+            else:
+                by_level[deck_level].append(entry)
+
+    for entries in [*by_level.values(), extra_entries]:
+        entries.sort(key=lambda entry: entry.deck_order)
+
+    selection_report = {
+        **selection.report(),
+        "matched_additional_simplified": sorted(matched_additional_simplified),
+        "unmatched_additional_simplified": sorted(
+            selection.additional_simplified - matched_additional_simplified
+        ),
+        "skipped_study_targets": skipped_targets,
+    }
+
+    return by_level, extra_entries, database, selection_report
+
+
+def find_audio_path(entry: EnrichedWordEntry) -> Path | None:
     candidates = [
-        AUDIO_DIR / f"cmn-{entry.simplified}.mp3",
-        EXTRA_AUDIO_DIR / f"cmn-{entry.simplified}.mp3",
+        common.AUDIO_DIR / entry.audio_filename,
+        common.EXTRA_AUDIO_DIR / entry.audio_filename,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -326,59 +288,41 @@ def find_audio_path(entry: WordEntry) -> Path | None:
     return None
 
 
-def generated_audio_path(entry: WordEntry) -> Path:
-    return EXTRA_AUDIO_DIR / f"cmn-{entry.simplified}.mp3"
+def generated_audio_path(entry: EnrichedWordEntry) -> Path:
+    return common.EXTRA_AUDIO_DIR / entry.audio_filename
 
 
-def remove_zero_length_audio_files() -> list[str]:
-    removed: list[str] = []
-    for folder in (AUDIO_DIR, EXTRA_AUDIO_DIR):
-        if not folder.exists():
-            continue
-        for path in folder.glob("*.mp3"):
-            if path.stat().st_size == 0:
-                path.unlink()
-                removed.append(str(path))
-    return removed
-
-
-def remove_failed_audio_output(path: Path) -> None:
-    if path.exists() and path.stat().st_size == 0:
-        path.unlink()
-
-
-def generate_missing_audio(entries: list[WordEntry]) -> tuple[list[str], list[dict[str, str]], list[str]]:
-    removed_zero_length = remove_zero_length_audio_files()
+def generate_missing_audio(entries: list[EnrichedWordEntry]) -> tuple[list[str], list[dict[str, str]], list[str]]:
+    removed_zero_length = common.remove_zero_length_audio_files()
     generated: list[str] = []
     failed: list[dict[str, str]] = []
-    seen_words: set[str] = set()
+    seen_filenames: set[str] = set()
 
     for entry in entries:
         if find_audio_path(entry):
             continue
-        word = entry.simplified.strip()
-        if not word or word in seen_words:
+        if not entry.simplified.strip() or entry.audio_filename in seen_filenames:
             continue
-        seen_words.add(word)
+        seen_filenames.add(entry.audio_filename)
 
         output_path = generated_audio_path(entry)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            communicate = edge_tts.Communicate(word, VOICE)
+            communicate = edge_tts.Communicate(entry.simplified.strip(), common.VOICE)
             communicate.save_sync(str(output_path))
             if output_path.exists() and output_path.stat().st_size > 0:
                 generated.append(str(output_path))
             else:
-                remove_failed_audio_output(output_path)
+                common.remove_failed_audio_output(output_path)
                 failed.append({
-                    "word": word,
+                    "word": entry.simplified,
                     "file": str(output_path),
                     "error": "edge-tts produced no audio data",
                 })
         except Exception as exc:
-            remove_failed_audio_output(output_path)
+            common.remove_failed_audio_output(output_path)
             failed.append({
-                "word": word,
+                "word": entry.simplified,
                 "file": str(output_path),
                 "error": str(exc),
             })
@@ -386,21 +330,20 @@ def generate_missing_audio(entries: list[WordEntry]) -> tuple[list[str], list[di
     return generated, failed, removed_zero_length
 
 
-def collect_media(entries: list[WordEntry]) -> tuple[list[str], list[str]]:
-    media = list(STATIC_MEDIA)
+def collect_media(entries: list[EnrichedWordEntry]) -> tuple[list[str], list[str]]:
+    media = list(common.STATIC_MEDIA)
     missing_audio: list[str] = []
     seen_media_names = {Path(path).name for path in media}
 
     for entry in entries:
         audio_path = find_audio_path(entry)
         if audio_path:
-            audio = str(audio_path)
             media_name = audio_path.name
             if media_name not in seen_media_names:
                 seen_media_names.add(media_name)
-                media.append(audio)
+                media.append(str(audio_path))
         else:
-            missing_audio.append(f"cmn-{entry.simplified}.mp3")
+            missing_audio.append(entry.audio_filename)
 
     return media, sorted(set(missing_audio))
 
@@ -414,6 +357,16 @@ def copy_zip_info(reference_info: zipfile.ZipInfo, filename: str | None = None) 
     output_info.extra = reference_info.extra
     output_info.create_system = reference_info.create_system
     return output_info
+
+
+def normalize_zip_file(source: Path, output: Path, zip_datetime: tuple[int, int, int, int, int, int]) -> None:
+    with zipfile.ZipFile(source) as source_zip, zipfile.ZipFile(output, "w") as output_zip:
+        for info in source_zip.infolist():
+            data = source_zip.read(info.filename)
+            output_info = copy_zip_info(info)
+            output_info.date_time = zip_datetime
+            output_info.extra = b""
+            output_zip.writestr(output_info, data)
 
 
 def rewrite_generated_zip_datetimes(
@@ -446,9 +399,10 @@ def write_package(
     package: genanki.Package,
     output_apkg: Path,
     timestamp: float | None,
+    deterministic_zip: bool,
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
 ) -> None:
-    if zip_generated_datetime is None:
+    if zip_generated_datetime is None and not deterministic_zip:
         if timestamp is None:
             package.write_to_file(str(output_apkg))
         else:
@@ -464,81 +418,125 @@ def write_package(
         else:
             package.write_to_file(str(temporary_path), timestamp=timestamp)
 
-        rewrite_generated_zip_datetimes(
-            source=temporary_path,
-            output=output_apkg,
-            generated_datetime=zip_generated_datetime,
-        )
+        if zip_generated_datetime is not None:
+            rewrite_generated_zip_datetimes(
+                source=temporary_path,
+                output=output_apkg,
+                generated_datetime=zip_generated_datetime,
+            )
+        else:
+            normalize_zip_file(temporary_path, output_apkg, DEFAULT_ZIP_DATETIME)
     finally:
         temporary_path.unlink(missing_ok=True)
 
 
+def build_package(
+    enriched_db: Path,
+    deck_config: Path | None,
+    output_apkg: Path,
+    report_path: Path,
+    timestamp: float | None,
+    deterministic_zip: bool,
+    zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
+) -> dict[str, Any]:
+    selection = load_deck_selection(deck_config)
+    hsk_entries, extra_entries, database, selection_report = load_enriched_entries(enriched_db, selection)
+    all_entries = [entry for level in common.LEVELS for entry in hsk_entries[level]] + extra_entries
+
+    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_missing_audio(all_entries)
+    models = common.create_models()
+    decks = build_decks(models, hsk_entries, extra_entries)
+    media_files, missing_audio = collect_media(all_entries)
+
+    package = genanki.Package(decks, media_files=media_files)
+    write_package(
+        package=package,
+        output_apkg=output_apkg,
+        timestamp=timestamp,
+        deterministic_zip=deterministic_zip,
+        zip_generated_datetime=zip_generated_datetime,
+    )
+
+    report = {
+        "output": str(output_apkg),
+        "report": str(report_path),
+        "enriched_db": str(enriched_db),
+        "deck_config": selection_report,
+        "source_schema": database.get("schema"),
+        "deck_root": common.DECK_ROOT,
+        "card_types": common.CARD_TYPES,
+        "dedupe_key": database.get("enrichment", {}).get("dedupe_key"),
+        "hsk_words_after_dedupe": sum(len(hsk_entries[level]) for level in common.LEVELS),
+        "extra_words": len(extra_entries),
+        "total_words": len(all_entries),
+        "total_cards": len(all_entries) * len(common.CARD_TYPES),
+        "decks": len(decks),
+        "audio_files_packaged": len(media_files) - len(common.STATIC_MEDIA),
+        "audio_voice": common.VOICE,
+        "hanzi_writer_version": common.read_hanzi_writer_package_version(),
+        "hanzi_writer_bundle": str(common.HANZI_WRITER_BUNDLE),
+        "timestamp": timestamp,
+        "deterministic_zip": deterministic_zip,
+        "zip_datetime": DEFAULT_ZIP_DATETIME if deterministic_zip and zip_generated_datetime is None else None,
+        "zip_generated_datetime": zip_generated_datetime,
+        "generated_audio_files": generated_audio,
+        "failed_audio_generation": failed_audio_generation,
+        "removed_zero_length_audio_files": removed_zero_length_audio,
+        "dropped_duplicate_occurrences": len(database.get("xiehanzi", {}).get("dropped_duplicates", [])),
+        "dropped_duplicates": database.get("xiehanzi", {}).get("dropped_duplicates", []),
+        "skipped_extra_duplicate_occurrences": len(database.get("xiehanzi", {}).get("skipped_extra_duplicates", [])),
+        "skipped_extra_duplicates": database.get("xiehanzi", {}).get("skipped_extra_duplicates", []),
+        "missing_audio_files": missing_audio,
+        "hsk_counts": {level: len(hsk_entries[level]) for level in common.LEVELS},
+    }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return report
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--enriched-db", type=Path, default=DEFAULT_ENRICHED_DB, help="Input enriched JSON database.")
+    parser.add_argument("--config", type=Path, default=DEFAULT_DECK_CONFIG, help="Deck selection JSON config.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_APKG, help="Output APKG path.")
+    parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH, help="Output report JSON path.")
     parser.add_argument(
         "--timestamp",
         type=float,
-        default=None,
-        help="Optional fixed genanki timestamp for deterministic comparison builds.",
+        default=DEFAULT_GENANKI_TIMESTAMP,
+        help="Fixed genanki timestamp for hermetic builds.",
+    )
+    parser.add_argument(
+        "--deterministic-zip",
+        action="store_true",
+        help="Rewrite the APKG zip with fixed member timestamps for byte-reproducible output.",
     )
     parser.add_argument(
         "--zip-generated-datetime",
         type=parse_zip_datetime,
-        default=None,
-        help="Optionally set ZIP timestamps for generated members collection.anki2 and media. Format: YYYY-MM-DDTHH:MM:SS.",
+        default=DEFAULT_GENERATED_ZIP_DATETIME,
+        help="Set ZIP timestamps for generated members collection.anki2 and media. Format: YYYY-MM-DDTHH:MM:SS.",
     )
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int:
     args = parse_args()
-    hsk_entries, hsk_keys, dropped_duplicates = load_hsk_entries()
-    extra_entries, skipped_extra_duplicates = load_extra_entries(hsk_keys)
-    all_entries = [entry for level in LEVELS for entry in hsk_entries[level]] + extra_entries
+    if not args.enriched_db.exists():
+        print(f"missing enriched DB: {args.enriched_db}")
+        return 2
 
-    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_missing_audio(all_entries)
-    models = create_models()
-    decks = build_decks(models, hsk_entries, extra_entries)
-    media_files, missing_audio = collect_media(all_entries)
-
-    write_package(
-        genanki.Package(decks, media_files=media_files),
-        output_apkg=OUTPUT_APKG,
+    report = build_package(
+        enriched_db=args.enriched_db,
+        deck_config=args.config,
+        output_apkg=args.output,
+        report_path=args.report,
         timestamp=args.timestamp,
+        deterministic_zip=args.deterministic_zip,
         zip_generated_datetime=args.zip_generated_datetime,
-    )
-
-    report = {
-        "output": str(OUTPUT_APKG),
-        "report": str(REPORT_PATH),
-        "deck_root": DECK_ROOT,
-        "card_types": CARD_TYPES,
-        "dedupe_key": "Simplified + normalized Pinyin",
-        "hsk_words_after_dedupe": sum(len(hsk_entries[level]) for level in LEVELS),
-        "extra_words": len(extra_entries),
-        "total_words": len(all_entries),
-        "total_cards": len(all_entries) * len(CARD_TYPES),
-        "decks": len(decks),
-        "audio_files_packaged": len(media_files) - len(STATIC_MEDIA),
-        "audio_voice": VOICE,
-        "hanzi_writer_version": read_hanzi_writer_package_version(),
-        "hanzi_writer_bundle": str(HANZI_WRITER_BUNDLE),
-        "generated_audio_files": generated_audio,
-        "failed_audio_generation": failed_audio_generation,
-        "removed_zero_length_audio_files": removed_zero_length_audio,
-        "dropped_duplicate_occurrences": len(dropped_duplicates),
-        "dropped_duplicates": dropped_duplicates,
-        "skipped_extra_duplicate_occurrences": len(skipped_extra_duplicates),
-        "skipped_extra_duplicates": skipped_extra_duplicates,
-        "missing_audio_files": missing_audio,
-        "hsk_counts": {level: len(hsk_entries[level]) for level in LEVELS},
-        "timestamp": args.timestamp,
-        "zip_generated_datetime": args.zip_generated_datetime,
-    }
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
     )
     console_report = {
         key: value
@@ -546,7 +544,8 @@ def main() -> None:
         if key not in {"dropped_duplicates", "skipped_extra_duplicates"}
     }
     print(json.dumps(console_report, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
