@@ -25,8 +25,3 @@ Pipeline stages:
   `deck_inputs/apkg_build_invariant.json`.
 - `update_cc_cedict_snapshot.py`: refresh the pinned CC-CEDICT snapshot when an
   intentional source-data update is needed.
-
-Diagnostic helpers:
-
-- `normalize_meaning_html_overrides.py`: compare old legacy Meaning HTML
-  overrides against the structured renderer and produce a compact diff report.
