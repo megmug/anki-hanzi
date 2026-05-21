@@ -109,5 +109,4 @@ See `License.md` and the license files in the vendored input directories.
 ## AI-Generated Code Notice
 
 Some code and documentation in this fork was produced or edited with AI
-assistance. Human review is still required before trusting generated deck output
-or migration scripts.
+assistance. Human review is still required before trusting generated deck output.
