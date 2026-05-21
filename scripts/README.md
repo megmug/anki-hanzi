@@ -15,6 +15,8 @@ Pipeline stages:
   from the pinned snapshot in `deck_inputs/cc-cedict/`.
 - `enrich_xiehanzi_db.py`: attach xiehanzi study targets from the deck input
   word lists to the master lexicon.
+- `meaning_html.py`: render xiehanzi-style Meaning HTML from structured word
+  and form data.
 - `deck_build_common.py`: shared template, media, model, and stable-id helpers.
 - `generate_xiehanzi_deck.py`: generate the APKG from the enriched JSON
   database. It reads `deck_inputs/deck_config.json` to select which xiehanzi
@@ -23,3 +25,8 @@ Pipeline stages:
   `deck_inputs/apkg_build_invariant.json`.
 - `update_cc_cedict_snapshot.py`: refresh the pinned CC-CEDICT snapshot when an
   intentional source-data update is needed.
+
+Diagnostic helpers:
+
+- `normalize_meaning_html_overrides.py`: compare old legacy Meaning HTML
+  overrides against the structured renderer and produce a compact diff report.

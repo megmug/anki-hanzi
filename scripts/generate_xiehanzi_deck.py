@@ -31,6 +31,7 @@ import edge_tts
 import genanki
 
 import deck_build_common as common
+from meaning_html import render_meaning_html
 
 
 DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
@@ -207,6 +208,7 @@ def load_enriched_entries(
     extra_entries: list[EnrichedWordEntry] = []
     matched_additional_simplified: set[str] = set()
     skipped_targets = 0
+    rendered_meaning_html_used = 0
 
     for word in database.get("words", []):
         simplified = normalize_simplified(word["simplified"])
@@ -224,6 +226,7 @@ def load_enriched_entries(
             (None, raw_entry)
             for raw_entry in (xiehanzi.get("study_targets", []) or xiehanzi.get("deck_entries", []))
         ]
+        rendered_definition_html = render_meaning_html(word) if raw_entries else ""
 
         for form, raw_entry in raw_entries:
             deck_level = str(raw_entry["deck_level"])
@@ -243,6 +246,8 @@ def load_enriched_entries(
                     variants = word.get("traditional_variants") or []
                 traditional = variants[0] if variants else simplified
 
+            rendered_meaning_html_used += 1
+
             entry = EnrichedWordEntry(
                 simplified=simplified,
                 traditional=str(traditional),
@@ -251,7 +256,7 @@ def load_enriched_entries(
                 level=str(raw_entry["raw_level"]),
                 pos=str(raw_entry["pos"]),
                 frequency="" if frequency is None else str(frequency),
-                definition_html=str(raw_entry["meaning_html"]),
+                definition_html=rendered_definition_html,
                 source="Extra" if deck_level == "Extra" else f"HSK {deck_level}",
                 audio_filename=f"cmn-{simplified}.mp3",
                 deck_order=int(raw_entry["deck_order"]),
@@ -272,6 +277,9 @@ def load_enriched_entries(
             selection.additional_simplified - matched_additional_simplified
         ),
         "skipped_study_targets": skipped_targets,
+        "meaning_html": {
+            "rendered_from_data": rendered_meaning_html_used,
+        },
     }
 
     return by_level, extra_entries, database, selection_report

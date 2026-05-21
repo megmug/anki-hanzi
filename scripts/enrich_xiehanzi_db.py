@@ -359,6 +359,7 @@ def study_target_payload(entry: dict[str, Any]) -> dict[str, Any]:
     payload = dict(entry)
     payload.pop("simplified", None)
     payload.pop("traditional", None)
+    payload.pop("meaning_html", None)
     payload.pop("audio_filename", None)
     payload.pop("frequency", None)
     payload.pop("source", None)
