@@ -7,6 +7,11 @@ This is a reproduction generator. It should produce the same deck content as
 `scripts/generate_xiehanzi_deck.py`, but it must read word/card data only from
 `master_db_output/cc_cedict_xiehanzi_enriched.json`.
 
+`deck_inputs/deck_config.json` controls which enriched xiehanzi study targets
+are emitted as notes. This first config layer selects target words only; card
+types are still the fixed Meaning, Pinyin, and Write set from the reference
+generator.
+
 The older TSV-based generator intentionally remains unchanged as the reference
 implementation until this generator can reproduce it.
 
@@ -32,6 +37,7 @@ import generate_xiehanzi_deck as reference
 
 
 DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
+DEFAULT_DECK_CONFIG = Path("deck_inputs/deck_config.json")
 DEFAULT_OUTPUT_APKG = Path("Anki-xiehanzi - New HSK (2025) from enriched.apkg")
 DEFAULT_REPORT_PATH = Path("build_reports/generate_xiehanzi_from_enriched_report.json")
 DEFAULT_GENANKI_TIMESTAMP = 1779251987.6
@@ -70,13 +76,143 @@ class EnrichedWordEntry:
         ]
 
 
-def load_enriched_entries(enriched_db_path: Path) -> tuple[dict[str, list[EnrichedWordEntry]], list[EnrichedWordEntry], dict[str, Any]]:
+@dataclass(frozen=True)
+class DeckSelection:
+    hsk_levels: tuple[str, ...]
+    additional_simplified: frozenset[str]
+    include_all_extra: bool
+    config_path: str | None
+    config_found: bool
+
+    def report(self) -> dict[str, Any]:
+        return {
+            "config_path": self.config_path,
+            "config_found": self.config_found,
+            "hsk_levels": list(self.hsk_levels),
+            "additional_simplified": sorted(self.additional_simplified),
+            "include_all_extra": self.include_all_extra,
+        }
+
+
+def normalize_simplified(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def parse_hsk_levels(raw_levels: Any) -> tuple[str, ...]:
+    if raw_levels is None or raw_levels == "all":
+        return tuple(reference.LEVELS)
+
+    if isinstance(raw_levels, str):
+        raw_levels = [raw_levels]
+
+    if not isinstance(raw_levels, list):
+        raise ValueError("deck config selection.hsk_levels must be \"all\" or a list")
+
+    levels: list[str] = []
+    for raw_level in raw_levels:
+        level = str(raw_level).strip()
+        if level == "all":
+            return tuple(reference.LEVELS)
+        if level not in reference.LEVELS:
+            raise ValueError(f"unknown HSK level in deck config: {level}")
+        if level not in levels:
+            levels.append(level)
+
+    return tuple(levels)
+
+
+def parse_simplified_list(value: Any, field_name: str) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if not isinstance(value, list):
+        raise ValueError(f"deck config selection.{field_name} must be a list")
+    return frozenset(
+        simplified
+        for simplified in (normalize_simplified(item) for item in value)
+        if simplified
+    )
+
+
+def load_deck_selection(config_path: Path | None) -> DeckSelection:
+    if config_path is None or not config_path.exists():
+        return DeckSelection(
+            hsk_levels=tuple(reference.LEVELS),
+            additional_simplified=frozenset(),
+            include_all_extra=True,
+            config_path=str(config_path) if config_path is not None else None,
+            config_found=False,
+        )
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    selection = config.get("selection", config)
+    if not isinstance(selection, dict):
+        raise ValueError("deck config selection must be an object")
+
+    return DeckSelection(
+        hsk_levels=parse_hsk_levels(selection.get("hsk_levels", "all")),
+        additional_simplified=parse_simplified_list(
+            selection.get("additional_simplified", []),
+            "additional_simplified",
+        ),
+        include_all_extra=bool(selection.get("include_all_extra", False)),
+        config_path=str(config_path),
+        config_found=True,
+    )
+
+
+def should_include_target(simplified: str, deck_level: str, selection: DeckSelection) -> bool:
+    if deck_level in selection.hsk_levels:
+        return True
+    if simplified in selection.additional_simplified:
+        return True
+    return deck_level == "Extra" and selection.include_all_extra
+
+
+def build_decks(
+    models: dict[str, genanki.Model],
+    hsk_entries: dict[str, list[EnrichedWordEntry]],
+    extra_entries: list[EnrichedWordEntry],
+) -> list[genanki.Deck]:
+    decks: list[genanki.Deck] = []
+
+    for level in reference.LEVELS:
+        entries = hsk_entries[level]
+        if not entries:
+            continue
+        for card_type in reference.CARD_TYPES:
+            decks.append(
+                reference.create_deck(
+                    deck_name=f"{reference.DECK_ROOT}::HSK {level}::{card_type}",
+                    model=models[card_type],
+                    entries=entries,
+                )
+            )
+
+    if extra_entries:
+        for card_type in reference.CARD_TYPES:
+            decks.append(
+                reference.create_deck(
+                    deck_name=f"{reference.DECK_ROOT}::Extra::{card_type}",
+                    model=models[card_type],
+                    entries=extra_entries,
+                )
+            )
+
+    return decks
+
+
+def load_enriched_entries(
+    enriched_db_path: Path,
+    selection: DeckSelection,
+) -> tuple[dict[str, list[EnrichedWordEntry]], list[EnrichedWordEntry], dict[str, Any], dict[str, Any]]:
     database = json.loads(enriched_db_path.read_text(encoding="utf-8"))
     by_level: dict[str, list[EnrichedWordEntry]] = {level: [] for level in reference.LEVELS}
     extra_entries: list[EnrichedWordEntry] = []
+    matched_additional_simplified: set[str] = set()
+    skipped_targets = 0
 
     for word in database.get("words", []):
-        simplified = str(word["simplified"])
+        simplified = normalize_simplified(word["simplified"])
         xiehanzi = word.get("xiehanzi") or {}
         frequency = xiehanzi.get("frequency")
         form_entries = [
@@ -94,6 +230,13 @@ def load_enriched_entries(enriched_db_path: Path) -> tuple[dict[str, list[Enrich
 
         for form, raw_entry in raw_entries:
             deck_level = str(raw_entry["deck_level"])
+            if not should_include_target(simplified, deck_level, selection):
+                skipped_targets += 1
+                continue
+
+            if simplified in selection.additional_simplified:
+                matched_additional_simplified.add(simplified)
+
             traditional = raw_entry.get("traditional")
             if traditional is None:
                 variants = []
@@ -125,7 +268,16 @@ def load_enriched_entries(enriched_db_path: Path) -> tuple[dict[str, list[Enrich
     for entries in [*by_level.values(), extra_entries]:
         entries.sort(key=lambda entry: entry.deck_order)
 
-    return by_level, extra_entries, database
+    selection_report = {
+        **selection.report(),
+        "matched_additional_simplified": sorted(matched_additional_simplified),
+        "unmatched_additional_simplified": sorted(
+            selection.additional_simplified - matched_additional_simplified
+        ),
+        "skipped_study_targets": skipped_targets,
+    }
+
+    return by_level, extra_entries, database, selection_report
 
 
 def find_audio_path(entry: EnrichedWordEntry) -> Path | None:
@@ -283,18 +435,20 @@ def write_package(
 
 def build_package(
     enriched_db: Path,
+    deck_config: Path | None,
     output_apkg: Path,
     report_path: Path,
     timestamp: float | None,
     deterministic_zip: bool,
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
 ) -> dict[str, Any]:
-    hsk_entries, extra_entries, database = load_enriched_entries(enriched_db)
+    selection = load_deck_selection(deck_config)
+    hsk_entries, extra_entries, database, selection_report = load_enriched_entries(enriched_db, selection)
     all_entries = [entry for level in reference.LEVELS for entry in hsk_entries[level]] + extra_entries
 
     generated_audio, failed_audio_generation, removed_zero_length_audio = generate_missing_audio(all_entries)
     models = reference.create_models()
-    decks = reference.build_decks(models, hsk_entries, extra_entries)
+    decks = build_decks(models, hsk_entries, extra_entries)
     media_files, missing_audio = collect_media(all_entries)
 
     package = genanki.Package(decks, media_files=media_files)
@@ -310,6 +464,7 @@ def build_package(
         "output": str(output_apkg),
         "report": str(report_path),
         "enriched_db": str(enriched_db),
+        "deck_config": selection_report,
         "source_schema": database.get("schema"),
         "deck_root": reference.DECK_ROOT,
         "card_types": reference.CARD_TYPES,
@@ -348,6 +503,7 @@ def build_package(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--enriched-db", type=Path, default=DEFAULT_ENRICHED_DB, help="Input enriched JSON database.")
+    parser.add_argument("--config", type=Path, default=DEFAULT_DECK_CONFIG, help="Deck selection JSON config.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_APKG, help="Output APKG path.")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH, help="Output report JSON path.")
     parser.add_argument(
@@ -378,6 +534,7 @@ def main() -> int:
 
     report = build_package(
         enriched_db=args.enriched_db,
+        deck_config=args.config,
         output_apkg=args.output,
         report_path=args.report,
         timestamp=args.timestamp,

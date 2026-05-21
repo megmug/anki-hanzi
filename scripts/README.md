@@ -18,7 +18,8 @@ Pipeline stages:
 - `generate_xiehanzi_deck.py`: reference generator from the prepared xiehanzi
   TSV inputs.
 - `generate_xiehanzi_deck_from_enriched_db.py`: reproduction generator from the
-  enriched JSON database.
+  enriched JSON database. It reads `deck_inputs/deck_config.json` to select
+  which xiehanzi study targets become notes.
 - `verify_xiehanzi_apkg_build.py`: compare both generated APKGs.
 - `update_cc_cedict_snapshot.py`: refresh the pinned CC-CEDICT snapshot when an
   intentional source-data update is needed.

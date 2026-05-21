@@ -1,0 +1,9 @@
+{
+  "schema": "xiehanzi-deck-config-v1",
+  "selection": {
+    "hsk_levels": "all",
+    "additional_simplified": [
+      "英语"
+    ]
+  }
+}
