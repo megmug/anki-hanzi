@@ -447,29 +447,12 @@ def attach_deck_entries_to_words(
         prefer_first(form.setdefault("traditional_variants", []), entry["traditional"])
         append_unique(form.setdefault("tags", []), entry["tags"])
         form["tags"].sort()
-        form_xiehanzi = form.setdefault("xiehanzi", {})
-        form_xiehanzi.setdefault("study_targets", []).append(study_target_payload(entry))
 
-    for word in words:
-        xiehanzi = word.get("xiehanzi")
-        if xiehanzi and xiehanzi.get("deck_entries"):
-            xiehanzi["deck_entries"].sort(
-                key=lambda entry: (
-                    entry["deck_level"],
-                    entry["deck_order"],
-                )
-            )
-
-        for form in word.get("forms", []):
-            form_xiehanzi = form.get("xiehanzi")
-            if not form_xiehanzi:
-                continue
-            form_xiehanzi["study_targets"].sort(
-                key=lambda entry: (
-                    entry["deck_level"],
-                    entry["deck_order"],
-                )
-            )
+        if entry.get("pinyin"):
+            try:
+                form["pinyin"] = transcriptions.accented_to_numbered(entry["pinyin"])
+            except ValueError:
+                pass
 
     return unmatched, form_stats
 

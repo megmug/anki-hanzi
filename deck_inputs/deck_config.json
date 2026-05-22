@@ -1,9 +1,58 @@
 {
-  "schema": "xiehanzi-deck-config-v1",
+  "schema": "xiehanzi-deck-config-v2",
+  "deck": {
+    "name": "Anki Xiehanzi - New HSK (2025)",
+    "output_filename": "Anki-xiehanzi - New HSK (2025).apkg",
+    "hierarchy": "{name}::{group}::{card_type}"
+  },
   "selection": {
-    "hsk_levels": "all",
+    "tags": "all",
     "additional_simplified": [
       "英语"
     ]
+  },
+  "groups": [
+    {
+      "tag_pattern": "hsk:1",
+      "name": "HSK 1"
+    },
+    {
+      "tag_pattern": "hsk:2",
+      "name": "HSK 2"
+    },
+    {
+      "tag_pattern": "hsk:3",
+      "name": "HSK 3"
+    },
+    {
+      "tag_pattern": "hsk:4",
+      "name": "HSK 4"
+    },
+    {
+      "tag_pattern": "hsk:5",
+      "name": "HSK 5"
+    },
+    {
+      "tag_pattern": "hsk:6",
+      "name": "HSK 6"
+    },
+    {
+      "tag_pattern": "hsk:7-9",
+      "name": "HSK 7-9"
+    },
+    {
+      "tag_pattern": "extra",
+      "name": "Extra"
+    }
+  ],
+  "card_types": [
+    "Meaning",
+    "Pinyin",
+    "Write"
+  ],
+  "templates_dir": "deck_inputs/card_templates",
+  "audio": {
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "filename_pattern": "cmn-{simplified}.mp3"
   }
 }

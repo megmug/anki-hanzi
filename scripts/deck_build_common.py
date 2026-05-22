@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import genanki
 
@@ -51,6 +52,142 @@ STATIC_MEDIA = [
     str(CARD_TEMPLATES_DIR / "files/_hanzicraft.png"),
     str(CARD_TEMPLATES_DIR / "files/_characterpop.svg"),
 ]
+
+
+DEFAULT_CONFIG_PATH = DECK_INPUTS_DIR / "deck_config.json"
+
+
+@dataclass(frozen=True)
+class GroupDef:
+    tag_pattern: str
+    name: str
+
+
+@dataclass(frozen=True)
+class AudioConfig:
+    voice: str = VOICE
+    filename_pattern: str = "cmn-{simplified}.mp3"
+
+
+@dataclass(frozen=True)
+class DeckConfig:
+    deck_name: str = DECK_ROOT
+    output_filename: str = str(OUTPUT_APKG)
+    hierarchy: str = "{name}::{group}::{card_type}"
+    groups: tuple[GroupDef, ...] = field(default_factory=lambda: (
+        GroupDef(tag_pattern="hsk:1", name="HSK 1"),
+        GroupDef(tag_pattern="hsk:2", name="HSK 2"),
+        GroupDef(tag_pattern="hsk:3", name="HSK 3"),
+        GroupDef(tag_pattern="hsk:4", name="HSK 4"),
+        GroupDef(tag_pattern="hsk:5", name="HSK 5"),
+        GroupDef(tag_pattern="hsk:6", name="HSK 6"),
+        GroupDef(tag_pattern="hsk:7-9", name="HSK 7-9"),
+        GroupDef(tag_pattern="extra", name="Extra"),
+    ))
+    card_types: tuple[str, ...] = tuple(CARD_TYPES)
+    templates_dir: str = str(CARD_TEMPLATES_DIR)
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    selection_tags: str | tuple[str, ...] = "all"
+    additional_simplified: frozenset[str] = frozenset()
+
+    @property
+    def output_apkg_path(self) -> Path:
+        return Path(self.output_filename)
+
+    @property
+    def templates_dir_path(self) -> Path:
+        return Path(self.templates_dir)
+
+    def group_for_tag(self, tag: str) -> GroupDef | None:
+        for group in self.groups:
+            if group.tag_pattern == tag:
+                return group
+        return None
+
+    def resolve_deck_name(self, group_name: str, card_type: str) -> str:
+        return self.hierarchy.format(
+            name=self.deck_name,
+            group=group_name,
+            card_type=card_type,
+        )
+
+    def audio_filename(self, simplified: str) -> str:
+        return self.audio.filename_pattern.format(simplified=simplified)
+
+    def template_files(self, card_type: str) -> tuple[Path, Path]:
+        tdir = self.templates_dir_path
+        mapping = {
+            "Meaning": (tdir / "meaning/front.html", tdir / "meaning/back.html"),
+            "Pinyin": (tdir / "pinyin/front.html", tdir / "pinyin/back.html"),
+            "Write": (tdir / "write/front.html", tdir / "write/back.html"),
+        }
+        if card_type not in mapping:
+            raise ValueError(f"unknown card type: {card_type}")
+        return mapping[card_type]
+
+    def static_media(self) -> list[str]:
+        tdir = self.templates_dir_path
+        return [
+            str(tdir / "fonts/_MaterialIcons-Regular.woff"),
+            str(tdir / "fonts/_MaterialIcons-Regular.woff2"),
+            str(tdir / "files/_pleco.png"),
+            str(tdir / "files/_youdao.png"),
+            str(tdir / "files/_rtega.png"),
+            str(tdir / "files/_tatoeba.png"),
+            str(tdir / "files/_hanzicraft.png"),
+            str(tdir / "files/_characterpop.svg"),
+        ]
+
+
+def load_deck_config(path: Path | None = None) -> DeckConfig:
+    if path is None:
+        path = DEFAULT_CONFIG_PATH
+    if not path.exists():
+        return DeckConfig()
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    deck_section = raw.get("deck", {})
+    selection = raw.get("selection", {})
+    audio_section = raw.get("audio", {})
+
+    groups: list[GroupDef] = []
+    for group_raw in raw.get("groups", []):
+        groups.append(GroupDef(
+            tag_pattern=str(group_raw["tag_pattern"]),
+            name=str(group_raw["name"]),
+        ))
+    if not groups:
+        groups = list(DeckConfig.groups)
+
+    selection_tags: str | tuple[str, ...] = "all"
+    raw_tags = selection.get("tags", "all")
+    if raw_tags != "all":
+        if isinstance(raw_tags, list):
+            selection_tags = tuple(str(t) for t in raw_tags)
+        else:
+            selection_tags = str(raw_tags)
+
+    additional_simplified: frozenset[str] = frozenset()
+    raw_additional = selection.get("additional_simplified", [])
+    if isinstance(raw_additional, list):
+        additional_simplified = frozenset(
+            s for s in (str(item).strip() for item in raw_additional) if s
+        )
+
+    return DeckConfig(
+        deck_name=str(deck_section.get("name", DECK_ROOT)),
+        output_filename=str(deck_section.get("output_filename", str(OUTPUT_APKG))),
+        hierarchy=str(deck_section.get("hierarchy", "{name}::{group}::{card_type}")),
+        groups=tuple(groups),
+        card_types=tuple(raw.get("card_types", CARD_TYPES)),
+        templates_dir=str(raw.get("templates_dir", str(CARD_TEMPLATES_DIR))),
+        audio=AudioConfig(
+            voice=str(audio_section.get("voice", VOICE)),
+            filename_pattern=str(audio_section.get("filename_pattern", "cmn-{simplified}.mp3")),
+        ),
+        selection_tags=selection_tags,
+        additional_simplified=additional_simplified,
+    )
 
 
 class NoteEntry(Protocol):
@@ -107,12 +244,15 @@ def read_template(card_type: str, path: str | Path) -> str:
     return template
 
 
-def create_models() -> dict[str, genanki.Model]:
-    css = read_text(CARD_TEMPLATES_DIR / "styling-xiehanzi-3.0.css")
+def create_models(config: DeckConfig | None = None) -> dict[str, genanki.Model]:
+    if config is None:
+        config = DeckConfig()
+    templates_dir = config.templates_dir_path
+    css = read_text(templates_dir / "styling-xiehanzi-3.0.css")
     models: dict[str, genanki.Model] = {}
 
-    for card_type in CARD_TYPES:
-        front_path, back_path = TEMPLATE_FILES[card_type]
+    for card_type in config.card_types:
+        front_path, back_path = config.template_files(card_type)
         model_name = f"Basic - New HSK (2025) - {card_type.lower()}"
         models[card_type] = genanki.Model(
             model_id=stable_id(f"model:{model_name}"),

@@ -31,12 +31,13 @@ import edge_tts
 import genanki
 
 import deck_build_common as common
-from meaning_html import render_meaning_html
+from deck_build_common import DeckConfig, GroupDef
+from dragonmapper import transcriptions
+from meaning_html import numbered_to_xiehanzi_display, render_meaning_html
 
 
 DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
 DEFAULT_DECK_CONFIG = Path("deck_inputs/deck_config.json")
-DEFAULT_OUTPUT_APKG = common.OUTPUT_APKG
 DEFAULT_REPORT_PATH = Path("build_reports/generate_xiehanzi_report.json")
 DEFAULT_GENANKI_TIMESTAMP = 1779251987.6
 DEFAULT_GENERATED_ZIP_DATETIME = (2026, 5, 20, 6, 39, 48)
@@ -50,13 +51,8 @@ class EnrichedWordEntry:
     traditional: str
     pinyin: str
     zhuyin: str
-    level: str
-    pos: str
-    frequency: str
     definition_html: str
-    source: str
     audio_filename: str
-    deck_order: int
 
     @property
     def audio_ref(self) -> str:
@@ -68,7 +64,7 @@ class EnrichedWordEntry:
             self.traditional,
             self.pinyin,
             self.zhuyin,
-            self.pos,
+            "",
             self.definition_html,
             self.audio_ref,
         ]
@@ -96,9 +92,9 @@ def normalize_simplified(value: Any) -> str:
     return str(value or "").strip()
 
 
-def parse_hsk_levels(raw_levels: Any) -> tuple[str, ...]:
+def parse_hsk_levels(raw_levels: Any, known_levels: tuple[str, ...]) -> tuple[str, ...]:
     if raw_levels is None or raw_levels == "all":
-        return tuple(common.LEVELS)
+        return known_levels
 
     if isinstance(raw_levels, str):
         raw_levels = [raw_levels]
@@ -110,8 +106,8 @@ def parse_hsk_levels(raw_levels: Any) -> tuple[str, ...]:
     for raw_level in raw_levels:
         level = str(raw_level).strip()
         if level == "all":
-            return tuple(common.LEVELS)
-        if level not in common.LEVELS:
+            return known_levels
+        if level not in known_levels:
             raise ValueError(f"unknown HSK level in deck config: {level}")
         if level not in levels:
             levels.append(level)
@@ -131,23 +127,35 @@ def parse_simplified_list(value: Any, field_name: str) -> frozenset[str]:
     )
 
 
-def load_deck_selection(config_path: Path | None) -> DeckSelection:
+def _deck_levels_from_config(config: DeckConfig) -> tuple[str, ...]:
+    levels: list[str] = []
+    for group in config.groups:
+        if group.tag_pattern.startswith("hsk:"):
+            level = group.tag_pattern[len("hsk:"):]
+            if level and level not in levels:
+                levels.append(level)
+    return tuple(levels)
+
+
+def load_deck_selection(config_path: Path | None, config: DeckConfig) -> DeckSelection:
+    known_levels = _deck_levels_from_config(config)
+
     if config_path is None or not config_path.exists():
         return DeckSelection(
-            hsk_levels=tuple(common.LEVELS),
+            hsk_levels=known_levels,
             additional_simplified=frozenset(),
             include_all_extra=True,
             config_path=str(config_path) if config_path is not None else None,
             config_found=False,
         )
 
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    selection = config.get("selection", config)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    selection = raw.get("selection", raw)
     if not isinstance(selection, dict):
         raise ValueError("deck config selection must be an object")
 
     return DeckSelection(
-        hsk_levels=parse_hsk_levels(selection.get("hsk_levels", "all")),
+        hsk_levels=parse_hsk_levels(selection.get("hsk_levels", "all"), known_levels),
         additional_simplified=parse_simplified_list(
             selection.get("additional_simplified", []),
             "additional_simplified",
@@ -163,112 +171,143 @@ def should_include_target(simplified: str, deck_level: str, selection: DeckSelec
         return True
     if simplified in selection.additional_simplified:
         return True
-    return deck_level == "Extra" and selection.include_all_extra
+    return deck_level.lower() == "extra" and selection.include_all_extra
 
 
 def build_decks(
+    config: DeckConfig,
     models: dict[str, genanki.Model],
-    hsk_entries: dict[str, list[EnrichedWordEntry]],
-    extra_entries: list[EnrichedWordEntry],
+    group_entries: dict[str, list[EnrichedWordEntry]],
 ) -> list[genanki.Deck]:
     decks: list[genanki.Deck] = []
 
-    for level in common.LEVELS:
-        entries = hsk_entries[level]
+    for group in config.groups:
+        entries = group_entries.get(group.tag_pattern, [])
         if not entries:
             continue
-        for card_type in common.CARD_TYPES:
+        for card_type in config.card_types:
             decks.append(
                 common.create_deck(
-                    deck_name=f"{common.DECK_ROOT}::HSK {level}::{card_type}",
+                    deck_name=config.resolve_deck_name(group.name, card_type),
                     model=models[card_type],
                     entries=entries,
-                )
-            )
-
-    if extra_entries:
-        for card_type in common.CARD_TYPES:
-            decks.append(
-                common.create_deck(
-                    deck_name=f"{common.DECK_ROOT}::Extra::{card_type}",
-                    model=models[card_type],
-                    entries=extra_entries,
                 )
             )
 
     return decks
 
 
+def _select_groups_for_word(
+    word: dict[str, Any],
+    config: DeckConfig,
+    selection: DeckSelection,
+) -> dict[str, list[tuple[dict[str, Any], GroupDef]]]:
+    result: dict[str, list[tuple[dict[str, Any], GroupDef]]] = {}
+    simplified = normalize_simplified(word.get("simplified", ""))
+
+    for form in word.get("forms", []):
+        form_tags = set(form.get("tags", []))
+        for group in config.groups:
+            level_str = group.tag_pattern.replace("hsk:", "") if group.tag_pattern.startswith("hsk:") else group.tag_pattern
+            if not should_include_target(simplified, level_str, selection):
+                continue
+            if group.tag_pattern in form_tags:
+                result.setdefault(group.tag_pattern, []).append((form, group))
+                break  # Only assign to the first/lowest matching group
+
+    return result
+
+
+def _resolve_display_pinyin(form: dict[str, Any]) -> str:
+    return numbered_to_xiehanzi_display(str(form.get("pinyin", "")))
+
+
+def _resolve_zhuyin(display_pinyin: str) -> str:
+    try:
+        return transcriptions.pinyin_to_zhuyin(display_pinyin)
+    except (ValueError, Exception):
+        return ""
+
+
 def load_enriched_entries(
     enriched_db_path: Path,
     selection: DeckSelection,
-) -> tuple[dict[str, list[EnrichedWordEntry]], list[EnrichedWordEntry], dict[str, Any], dict[str, Any]]:
+    config: DeckConfig,
+) -> tuple[dict[str, list[EnrichedWordEntry]], dict[str, Any], dict[str, Any]]:
     database = json.loads(enriched_db_path.read_text(encoding="utf-8"))
-    by_level: dict[str, list[EnrichedWordEntry]] = {level: [] for level in common.LEVELS}
-    extra_entries: list[EnrichedWordEntry] = []
+    group_entries: dict[str, list[EnrichedWordEntry]] = {
+        group.tag_pattern: [] for group in config.groups
+    }
     matched_additional_simplified: set[str] = set()
-    skipped_targets = 0
     rendered_meaning_html_used = 0
+    extra_group_tag = "extra"
 
     for word in database.get("words", []):
         simplified = normalize_simplified(word["simplified"])
-        xiehanzi = word.get("xiehanzi") or {}
-        frequency = xiehanzi.get("frequency")
-        form_entries = [
-            (form, raw_entry)
+
+        is_additional = simplified in selection.additional_simplified
+
+        has_any_target = any(
+            group.tag_pattern in form.get("tags", [])
             for form in word.get("forms", [])
-            for raw_entry in (
-                (form.get("xiehanzi") or {}).get("study_targets")
-                or (form.get("xiehanzi") or {}).get("deck_entries", [])
-            )
-        ]
-        raw_entries = form_entries or [
-            (None, raw_entry)
-            for raw_entry in (xiehanzi.get("study_targets", []) or xiehanzi.get("deck_entries", []))
-        ]
-        rendered_definition_html = render_meaning_html(word) if raw_entries else ""
+            for group in config.groups
+        )
+        if not has_any_target and not is_additional:
+            continue
 
-        for form, raw_entry in raw_entries:
-            deck_level = str(raw_entry["deck_level"])
-            if not should_include_target(simplified, deck_level, selection):
-                skipped_targets += 1
-                continue
+        rendered_definition_html = render_meaning_html(word)
 
-            if simplified in selection.additional_simplified:
-                matched_additional_simplified.add(simplified)
+        form_groups = _select_groups_for_word(word, config, selection)
 
-            traditional = raw_entry.get("traditional")
-            if traditional is None:
-                variants = []
-                if form is not None:
-                    variants = form.get("traditional_variants") or []
-                if not variants:
-                    variants = word.get("traditional_variants") or []
-                traditional = variants[0] if variants else simplified
+        for group_tag, form_group_pairs in form_groups.items():
+            for form, group in form_group_pairs:
+                if is_additional:
+                    matched_additional_simplified.add(simplified)
 
-            rendered_meaning_html_used += 1
+                traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
+                traditional = traditional_variants[0] if traditional_variants else simplified
 
-            entry = EnrichedWordEntry(
-                simplified=simplified,
-                traditional=str(traditional),
-                pinyin=str(raw_entry["pinyin"]),
-                zhuyin=str(raw_entry["zhuyin"]),
-                level=str(raw_entry["raw_level"]),
-                pos=str(raw_entry["pos"]),
-                frequency="" if frequency is None else str(frequency),
-                definition_html=rendered_definition_html,
-                source="Extra" if deck_level == "Extra" else f"HSK {deck_level}",
-                audio_filename=f"cmn-{simplified}.mp3",
-                deck_order=int(raw_entry["deck_order"]),
-            )
+                rendered_meaning_html_used += 1
 
-            if deck_level == "Extra":
-                extra_entries.append(entry)
-            else:
-                by_level[deck_level].append(entry)
+                display_pinyin = _resolve_display_pinyin(form)
+                zhuyin = _resolve_zhuyin(display_pinyin)
 
-    for entries in [*by_level.values(), extra_entries]:
-        entries.sort(key=lambda entry: entry.deck_order)
+                entry = EnrichedWordEntry(
+                    simplified=simplified,
+                    traditional=str(traditional),
+                    pinyin=display_pinyin,
+                    zhuyin=zhuyin,
+                    definition_html=rendered_definition_html,
+                    audio_filename=config.audio_filename(simplified),
+                )
+
+                group_entries[group_tag].append(entry)
+
+        if is_additional and not form_groups and extra_group_tag in group_entries:
+            matched_additional_simplified.add(simplified)
+
+            for form in word.get("forms", []):
+                traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
+                traditional = traditional_variants[0] if traditional_variants else simplified
+
+                rendered_meaning_html_used += 1
+
+                display_pinyin = _resolve_display_pinyin(form)
+                zhuyin = _resolve_zhuyin(display_pinyin)
+
+                entry = EnrichedWordEntry(
+                    simplified=simplified,
+                    traditional=str(traditional),
+                    pinyin=display_pinyin,
+                    zhuyin=zhuyin,
+                    definition_html=rendered_definition_html,
+                    audio_filename=config.audio_filename(simplified),
+                )
+
+                group_entries[extra_group_tag].append(entry)
+
+    for entries in group_entries.values():
+        entries.sort(key=lambda entry: entry.simplified)
 
     selection_report = {
         **selection.report(),
@@ -276,13 +315,12 @@ def load_enriched_entries(
         "unmatched_additional_simplified": sorted(
             selection.additional_simplified - matched_additional_simplified
         ),
-        "skipped_study_targets": skipped_targets,
         "meaning_html": {
             "rendered_from_data": rendered_meaning_html_used,
         },
     }
 
-    return by_level, extra_entries, database, selection_report
+    return group_entries, database, selection_report
 
 
 def find_audio_path(entry: EnrichedWordEntry) -> Path | None:
@@ -300,7 +338,7 @@ def generated_audio_path(entry: EnrichedWordEntry) -> Path:
     return common.EXTRA_AUDIO_DIR / entry.audio_filename
 
 
-def generate_missing_audio(entries: list[EnrichedWordEntry]) -> tuple[list[str], list[dict[str, str]], list[str]]:
+def generate_missing_audio(entries: list[EnrichedWordEntry], voice: str) -> tuple[list[str], list[dict[str, str]], list[str]]:
     removed_zero_length = common.remove_zero_length_audio_files()
     generated: list[str] = []
     failed: list[dict[str, str]] = []
@@ -316,7 +354,7 @@ def generate_missing_audio(entries: list[EnrichedWordEntry]) -> tuple[list[str],
         output_path = generated_audio_path(entry)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            communicate = edge_tts.Communicate(entry.simplified.strip(), common.VOICE)
+            communicate = edge_tts.Communicate(entry.simplified.strip(), voice)
             communicate.save_sync(str(output_path))
             if output_path.exists() and output_path.stat().st_size > 0:
                 generated.append(str(output_path))
@@ -338,8 +376,8 @@ def generate_missing_audio(entries: list[EnrichedWordEntry]) -> tuple[list[str],
     return generated, failed, removed_zero_length
 
 
-def collect_media(entries: list[EnrichedWordEntry]) -> tuple[list[str], list[str]]:
-    media = list(common.STATIC_MEDIA)
+def collect_media(entries: list[EnrichedWordEntry], static_media: list[str]) -> tuple[list[str], list[str]]:
+    media = list(static_media)
     missing_audio: list[str] = []
     seen_media_names = {Path(path).name for path in media}
 
@@ -440,21 +478,23 @@ def write_package(
 
 def build_package(
     enriched_db: Path,
-    deck_config: Path | None,
+    deck_config_path: Path | None,
     output_apkg: Path,
     report_path: Path,
     timestamp: float | None,
     deterministic_zip: bool,
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
 ) -> dict[str, Any]:
-    selection = load_deck_selection(deck_config)
-    hsk_entries, extra_entries, database, selection_report = load_enriched_entries(enriched_db, selection)
-    all_entries = [entry for level in common.LEVELS for entry in hsk_entries[level]] + extra_entries
+    config = common.load_deck_config(deck_config_path)
+    selection = load_deck_selection(deck_config_path, config)
+    group_entries, database, selection_report = load_enriched_entries(enriched_db, selection, config)
+    all_entries = [entry for entries in group_entries.values() for entry in entries]
 
-    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_missing_audio(all_entries)
-    models = common.create_models()
-    decks = build_decks(models, hsk_entries, extra_entries)
-    media_files, missing_audio = collect_media(all_entries)
+    static_media = config.static_media()
+    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_missing_audio(all_entries, config.audio.voice)
+    models = common.create_models(config)
+    decks = build_decks(config, models, group_entries)
+    media_files, missing_audio = collect_media(all_entries, static_media)
 
     package = genanki.Package(decks, media_files=media_files)
     write_package(
@@ -465,22 +505,28 @@ def build_package(
         zip_generated_datetime=zip_generated_datetime,
     )
 
+    group_counts = {group.tag_pattern: len(group_entries.get(group.tag_pattern, [])) for group in config.groups}
+
     report = {
         "output": str(output_apkg),
         "report": str(report_path),
         "enriched_db": str(enriched_db),
         "deck_config": selection_report,
         "source_schema": database.get("schema"),
-        "deck_root": common.DECK_ROOT,
-        "card_types": common.CARD_TYPES,
+        "deck_root": config.deck_name,
+        "card_types": list(config.card_types),
         "dedupe_key": database.get("enrichment", {}).get("dedupe_key"),
-        "hsk_words_after_dedupe": sum(len(hsk_entries[level]) for level in common.LEVELS),
-        "extra_words": len(extra_entries),
+        "hsk_words_after_dedupe": sum(
+            len(group_entries.get(g.tag_pattern, []))
+            for g in config.groups
+            if g.tag_pattern.startswith("hsk:")
+        ),
+        "extra_words": len(group_entries.get("extra", [])),
         "total_words": len(all_entries),
-        "total_cards": len(all_entries) * len(common.CARD_TYPES),
+        "total_cards": len(all_entries) * len(config.card_types),
         "decks": len(decks),
-        "audio_files_packaged": len(media_files) - len(common.STATIC_MEDIA),
-        "audio_voice": common.VOICE,
+        "audio_files_packaged": len(media_files) - len(static_media),
+        "audio_voice": config.audio.voice,
         "hanzi_writer_version": common.read_hanzi_writer_package_version(),
         "hanzi_writer_bundle": str(common.HANZI_WRITER_BUNDLE),
         "timestamp": timestamp,
@@ -495,7 +541,11 @@ def build_package(
         "skipped_extra_duplicate_occurrences": len(database.get("xiehanzi", {}).get("skipped_extra_duplicates", [])),
         "skipped_extra_duplicates": database.get("xiehanzi", {}).get("skipped_extra_duplicates", []),
         "missing_audio_files": missing_audio,
-        "hsk_counts": {level: len(hsk_entries[level]) for level in common.LEVELS},
+        "hsk_counts": {
+            g.tag_pattern.replace("hsk:", ""): count
+            for g, count in ((g, group_counts.get(g.tag_pattern, 0)) for g in config.groups)
+            if g.tag_pattern.startswith("hsk:")
+        },
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
@@ -509,7 +559,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--enriched-db", type=Path, default=DEFAULT_ENRICHED_DB, help="Input enriched JSON database.")
     parser.add_argument("--config", type=Path, default=DEFAULT_DECK_CONFIG, help="Deck selection JSON config.")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_APKG, help="Output APKG path.")
+    parser.add_argument("--output", type=Path, default=None, help="Output APKG path.")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH, help="Output report JSON path.")
     parser.add_argument(
         "--timestamp",
@@ -537,10 +587,15 @@ def main() -> int:
         print(f"missing enriched DB: {args.enriched_db}")
         return 2
 
+    output_apkg = args.output
+    if output_apkg is None:
+        config = common.load_deck_config(args.config)
+        output_apkg = config.output_apkg_path
+
     report = build_package(
         enriched_db=args.enriched_db,
-        deck_config=args.config,
-        output_apkg=args.output,
+        deck_config_path=args.config,
+        output_apkg=output_apkg,
         report_path=args.report,
         timestamp=args.timestamp,
         deterministic_zip=args.deterministic_zip,
