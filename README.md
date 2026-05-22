@@ -81,6 +81,49 @@ nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
 Then run `nix-build`, review the changed data and generated APKG, and commit the
 updated snapshot and hash pin only if the change is intended.
 
+## Migrating from a Previous Version
+
+Each commit that changes the deck structure includes a migration script under
+`migration/`. The script name is `migrate-<hash>.py`, where `<hash>` is the
+short commit hash of the **previous** version you are upgrading from.
+
+Example: to upgrade a deck built from commit `e7eeb8e` to the current version,
+use `migration/migrate-e7eeb8e.py`.
+
+### How to migrate
+
+1. **Build the new APKG**: run `nix-build` in this repo and keep the `result/`
+   symlink.
+2. **Backup your Anki collection**: export a full `.colpkg` from the profile
+   that contains your current deck.
+3. **Adjust the script**: open the migration script and edit the two values in
+   the `CONFIGURATION` block at the top:
+   - `APKG_PATH` — absolute path to the newly built APKG.
+   - `DECK_ROOT` — the name of the deck root in your existing Anki collection.
+   - `TARGET_PRESET_NAME` — the deck options preset to apply.
+4. **Test in a throw-away profile**: copy the script contents into Anki's
+   *Debug Console* (Help → Debug Console) and run it. Inspect the report.
+5. **Verify**: check deck name, note types, suspended cards, review counts,
+   and deck preset before syncing.
+
+The migration script:
+- snapshots scheduler state + review history from your old deck,
+- deletes the old deck root,
+- imports the new APKG,
+- matches old cards to new ones by note GUID (exact) or by
+  scope/kind/simplified/pinyin (loose),
+- copies suspended state for all matched cards,
+- copies full scheduler state + revlog only for "touched" cards (cards you have
+  studied),
+- leaves unmatched new cards as fresh.
+
+### Keeping migration scripts
+
+Migration scripts are kept permanently in `migration/`. When you later upgrade
+from a newer commit, use the matching `migrate-<hash>.py` for the commit you are
+upgrading from.
+You might need to migrate multiple times in a row, using the appropriate migration scripts, to catch up to the latest version.
+
 ## Safety
 
 Before importing or migrating Anki decks, make a full Anki backup.
