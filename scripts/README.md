@@ -1,7 +1,7 @@
 # Scripts
 
 These scripts are the current source-of-truth build pipeline for this fork's
-xiehanzi APKG.
+hanzi APKG.
 
 Run the full build with:
 
@@ -13,13 +13,13 @@ Pipeline stages:
 
 - `build_cc_cedict_master_db.py`: build the compact CC-CEDICT master lexicon
   from the pinned snapshot in `deck_inputs/cc-cedict/`.
-- `enrich_xiehanzi_db.py`: attach xiehanzi study targets from the deck input
+- `enrich_hanzi_db.py`: attach hanzi study targets from the deck input
   word lists to the master lexicon.
-- `meaning_html.py`: render xiehanzi-style Meaning HTML from structured word
+- `meaning_html.py`: render hanzi-style Meaning HTML from structured word
   and form data.
 - `deck_build_common.py`: shared template, media, model, and stable-id helpers.
-- `generate_xiehanzi_deck.py`: generate the APKG from the enriched JSON
-  database. It reads `deck_inputs/deck_config.json` to select which xiehanzi
+- `generate_hanzi_deck.py`: generate the APKG from the enriched JSON
+  database. It reads `deck_inputs/deck_config.json` to select which hanzi
   study targets become notes.
 - `verify_apkg_hash.py`: enforce or record the generated APKG hash against
   `deck_inputs/apkg_build_invariant.json`.

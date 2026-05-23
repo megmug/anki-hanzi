@@ -1,6 +1,6 @@
-# Anki-xiehanzi Custom Deck Fork
+# anki-hanzi Custom Deck
 
-This repository is a personal fork of
+This repository is a personal project originally forked from
 [krmanik/Anki-xiehanzi](https://github.com/krmanik/Anki-xiehanzi). The original
 project provides the upstream Anki-xiehanzi deck, website, and browser-based
 deck generator. This fork keeps the parts needed for my own Mandarin study deck
@@ -8,11 +8,7 @@ and has diverged intentionally.
 
 The current build produces one custom APKG:
 
-- `Anki-xiehanzi - New HSK (2025).apkg`
-
-The filename is kept for compatibility with the inherited deck lineage, but the
-fork is focused on the current HSK 3.0 / 2026-oriented study setup rather than
-the older upstream deck matrix.
+- `anki-hanzi.apkg`
 
 ## What Is Different
 
@@ -26,7 +22,7 @@ Compared with upstream, this fork currently:
   characters and Zhuyin disabled;
 - adds a HanziWriter-based scoring panel for Write cards;
 - builds from a Python/Nix pipeline instead of the old website generator;
-- uses a compact CC-CEDICT-derived JSON database enriched with xiehanzi HSK
+- uses a compact CC-CEDICT-derived JSON database enriched with hanzi HSK
   study targets;
 - checks the generated APKG against a pinned last-known-good hash by default.
 
@@ -127,7 +123,7 @@ You might need to migrate multiple times in a row, using the appropriate migrati
 ## Safety
 
 Before importing or migrating Anki decks, make a full Anki backup.
-There is currently no generally usable migration path from upstream xie hanzi decks.
+There is currently no generally usable migration path from upstream xiehanzi decks.
 
 ## Acknowledgements
 

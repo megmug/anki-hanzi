@@ -35,7 +35,7 @@ def load_pin(path: Path) -> dict[str, Any] | None:
 
 def write_pin(path: Path, apkg: Path, actual: dict[str, Any]) -> None:
     pin = {
-        "schema": "xiehanzi-apkg-build-invariant-v1",
+        "schema": "hanzi-apkg-build-invariant-v1",
         "apkg_filename": apkg.name,
         "sha256": actual["sha256"],
         "size": actual["size"],
@@ -70,7 +70,7 @@ def build_report(apkg: Path, pin_path: Path, mode: str) -> dict[str, Any]:
         status = "ok" if matches else "changed"
 
     return {
-        "schema": "xiehanzi-apkg-hash-verification-v1",
+        "schema": "hanzi-apkg-hash-verification-v1",
         "mode": mode,
         "status": status,
         "matches_expected": matches,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Render xiehanzi Meaning HTML from enriched lexicon word data."""
+"""Render hanzi Meaning HTML from enriched lexicon word data."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def normalize_numbered_pinyin_token(value: str) -> str:
     return value.replace("u:", "ü").replace("U:", "Ü")
 
 
-def numbered_to_xiehanzi_display(value: str) -> str:
-    """Convert numbered pinyin to the display form used by xiehanzi HTML.
+def numbered_to_display(value: str) -> str:
+    """Convert numbered pinyin to the display form used by hanzi HTML.
 
     Keep the inherited `r5` quirk intact. The old generated HTML renders erhua
     finals as `<span ...>r</span>5`, so normalizing `r5` to plain `r` would
@@ -51,7 +51,7 @@ def numbered_to_xiehanzi_display(value: str) -> str:
 
 
 def pinyin_html(value: str) -> str:
-    display = numbered_to_xiehanzi_display(value)
+    display = numbered_to_display(value)
     colored = colorized_HTML_string_from_string(
         display,
         "pinYinWrapper",

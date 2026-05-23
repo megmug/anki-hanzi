@@ -69,7 +69,7 @@ def read_snapshot_header(zip_path: Path) -> tuple[dict[str, str], dict[str, Any]
 def build_manifest(source_zip: Path, source_url: str) -> dict[str, Any]:
     header, member = read_snapshot_header(source_zip)
     return {
-        "schema": "xiehanzi-cc-cedict-snapshot-v1",
+        "schema": "hanzi-cc-cedict-snapshot-v1",
         "source_url": source_url,
         "archive_filename": DEFAULT_VENDOR_ZIP.name,
         "sha256": sha256_file(source_zip),

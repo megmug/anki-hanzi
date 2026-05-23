@@ -1,7 +1,7 @@
 """
-Stateful xiehanzi migration script for Anki's Debug Console.
+Stateful hanzi migration script for Anki's Debug Console.
 
-Generated for: migrate from commit e7eeb8e → current
+Generated for: migrate from commit d5903fc → current
 
 WARNING:
 - This script is destructive. Run it only after a full `.colpkg` backup.
@@ -55,19 +55,19 @@ if os.path.exists(_config_path):
     with open(_config_path, "r", encoding="utf-8") as f:
         _config = json.load(f)
 
-APKG_PATH = os.path.expanduser(_config.get("apkg_path", "~/Anki-xiehanzi/result/Anki-xiehanzi - New HSK (2025).apkg"))
+APKG_PATH = os.path.expanduser(_config.get("apkg_path", "~/anki-hanzi/result/anki-hanzi.apkg"))
 DECK_ROOT = _config.get("deck_root", "Xiehanzi")
 TARGET_PRESET_NAME = _config.get("target_preset_name", "Default")
 
 # Derived names (do not edit)
-IMPORTED_ROOT = "Anki Xiehanzi - New HSK (2025)"
+IMPORTED_ROOT = "汉字 (Hànzì)"
 FINAL_ROOT = DECK_ROOT
 OLD_ROOT = DECK_ROOT
 
 ALLOW_DESTRUCTIVE_MIGRATION = True
 ALLOW_SKIPPED_TOUCHED_KINDS = {"Audio"}
 ALLOW_SKIPPED_TOUCHED_SIMPLIFIED = set()
-XIEHANZI_NOTETYPE_PREFIX = "Basic - New HSK (2025) - "
+HANZI_NOTETYPE_PREFIX = "Basic - New HSK (2025) - "
 
 FIELD_SEPARATOR = "\x1f"
 KINDS = ["Audio", "Meaning", "Pinyin", "Write"]
@@ -374,7 +374,7 @@ def source_notetypes_from_records(records):
     return by_id
 
 
-def is_xiehanzi_notetype_name(name):
+def is_hanzi_notetype_name(name):
     if not name:
         return False
     return name.startswith(XIEHANZI_NOTETYPE_PREFIX)
@@ -409,11 +409,11 @@ def remove_empty_source_notetypes(source_notetypes):
             })
             continue
 
-        if not is_xiehanzi_notetype_name(current_name):
+        if not is_hanzi_notetype_name(current_name):
             skipped.append({
                 "notetype_id": mid,
                 "notetype_name": current_name,
-                "reason": "not an expected xiehanzi notetype name",
+                "reason": "not an expected hanzi notetype name",
                 "remaining_notes": remaining_notes,
             })
             continue
@@ -523,7 +523,7 @@ def extract_apkg_collection(apkg_path):
     if not os.path.exists(apkg_path):
         raise Exception(f"APKG_PATH does not exist: {apkg_path}")
 
-    tempdir = tempfile.mkdtemp(prefix="xiehanzi-state-apply-preview-")
+    tempdir = tempfile.mkdtemp(prefix="hanzi-state-apply-preview-")
     with zipfile.ZipFile(apkg_path) as archive:
         names = archive.namelist()
         db_name = None
@@ -915,7 +915,7 @@ try:
     notetype_cleanup = remove_empty_source_notetypes(source_notetypes)
     if notetype_cleanup["skipped"]:
         raise Exception(
-            "Old xiehanzi notetype cleanup was not clean:\n"
+            "Old hanzi notetype cleanup was not clean:\n"
             + json.dumps(notetype_cleanup, ensure_ascii=False, indent=2, sort_keys=True)
         )
 
@@ -964,7 +964,7 @@ try:
     now = int(time.time())
     next_revlog_id = int(mw.col.db.scalar("select max(id) from revlog") or 0) + 1
 
-    mw.col.db.execute("savepoint xiehanzi_stateful_apply")
+    mw.col.db.execute("savepoint hanzi_stateful_apply")
     state_savepoint_started = True
     try:
         full_state_copied = 0
@@ -998,12 +998,12 @@ try:
             "delete from revlog where cid not in (select id from cards)"
         )
 
-        mw.col.db.execute("release savepoint xiehanzi_stateful_apply")
+        mw.col.db.execute("release savepoint hanzi_stateful_apply")
         state_savepoint_started = False
     except Exception:
         if state_savepoint_started:
-            mw.col.db.execute("rollback to savepoint xiehanzi_stateful_apply")
-            mw.col.db.execute("release savepoint xiehanzi_stateful_apply")
+            mw.col.db.execute("rollback to savepoint hanzi_stateful_apply")
+            mw.col.db.execute("release savepoint hanzi_stateful_apply")
             state_savepoint_started = False
         raise
 
@@ -1011,15 +1011,15 @@ try:
     final_records = final_info["records"]
     final_by_key, final_duplicates, final_missing_key = index_by_key(final_records)
     final_card_ids = [record["card"]["id"] for record in final_records]
-    final_xiehanzi_notetype_names = sorted(
+    final_hanzi_notetype_names = sorted(
         {
             record["notetype_name"]
             for record in final_records
-            if is_xiehanzi_notetype_name(record["notetype_name"])
+            if is_hanzi_notetype_name(record["notetype_name"])
         }
     )
     final_plus_notetype_names = [
-        name for name in final_xiehanzi_notetype_names if name.endswith("+")
+        name for name in final_hanzi_notetype_names if name.endswith("+")
     ]
 
     schedule_mismatches = []
@@ -1117,12 +1117,12 @@ try:
     if preset_counts != Counter({target_preset_id: len(deck_ids_under(FINAL_ROOT))}):
         verify_problems.append(f"Deck preset counts unexpected: {dict(preset_counts)}")
     if final_plus_notetype_names:
-        verify_problems.append(f"Imported xiehanzi notetypes still have plus suffixes: {final_plus_notetype_names}")
+        verify_problems.append(f"Imported hanzi notetypes still have plus suffixes: {final_plus_notetype_names}")
 
     mw.reset()
 
     report_data = {
-        "schema": "xiehanzi-stateful-migration-v1",
+        "schema": "hanzi-stateful-migration-v1",
         "applied": not verify_problems,
         "config": {
             "apkg_path": APKG_PATH,
@@ -1165,7 +1165,7 @@ try:
         "final": {
             "cards": len(final_records),
             "kind_counts": summarize_kind_counts(final_records),
-            "xiehanzi_notetype_names": final_xiehanzi_notetype_names,
+            "hanzi_notetype_names": final_hanzi_notetype_names,
             "queue_counts": dict(sorted(queue_counts.items())),
             "revlog_rows_on_final_cards": final_revlog_on_final_cards,
             "orphaned_revlog_rows": orphaned_revlog_rows,
@@ -1201,7 +1201,7 @@ try:
         f"matched cards: {len(matched_source_keys)}",
         f"loose matches: {len(match_plan['loose_source_keys'])}",
         f"full states copied: {full_state_copied}",
-        f"old xiehanzi notetypes removed: {len(notetype_cleanup['removed'])}",
+        f"old hanzi notetypes removed: {len(notetype_cleanup['removed'])}",
         f"suspend-only cards set: {suspended_set}",
         f"revlog rows inserted: {revlog_rows_inserted}",
         f"touched cards skipped intentionally: {len(touched_unmatched)}",
@@ -1221,8 +1221,8 @@ except Exception:
     rollback_note = ""
     if state_savepoint_started:
         try:
-            mw.col.db.execute("rollback to savepoint xiehanzi_stateful_apply")
-            mw.col.db.execute("release savepoint xiehanzi_stateful_apply")
+            mw.col.db.execute("rollback to savepoint hanzi_stateful_apply")
+            mw.col.db.execute("release savepoint hanzi_stateful_apply")
             rollback_note = "State-apply savepoint rolled back."
         except Exception:
             rollback_note = "State-apply rollback failed:\n" + traceback.format_exc()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Shared helpers for building the custom xiehanzi APKG."""
+"""Shared helpers for building the custom hanzi APKG."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from typing import Any, Protocol
 import genanki
 
 
-DECK_ROOT = "Anki Xiehanzi - New HSK (2025)"
-OUTPUT_APKG = Path("Anki-xiehanzi - New HSK (2025).apkg")
+DECK_ROOT = "汉字 (Hànzì)"
+OUTPUT_APKG = Path("anki-hanzi.apkg")
 DECK_INPUTS_DIR = Path("deck_inputs")
 CARD_TEMPLATES_DIR = DECK_INPUTS_DIR / "card_templates"
 AUDIO_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Audio"
@@ -248,7 +248,7 @@ def create_models(config: DeckConfig | None = None) -> dict[str, genanki.Model]:
     if config is None:
         config = DeckConfig()
     templates_dir = config.templates_dir_path
-    css = read_text(templates_dir / "styling-xiehanzi-3.0.css")
+    css = read_text(templates_dir / "styling-hanzi-3.0.css")
     models: dict[str, genanki.Model] = {}
 
     for card_type in config.card_types:

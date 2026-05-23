@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 
 """
-Build the customized xiehanzi APKG from the enriched JSON database.
+Build the customized hanzi APKG from the enriched JSON database.
 
 The generator reads word/card data from
-`master_db_output/cc_cedict_xiehanzi_enriched.json` and uses the shared deck
+`master_db_output/cc_cedict_hanzi_enriched.json` and uses the shared deck
 build helpers in `scripts/deck_build_common.py` for templates, media, and stable
 Anki ids.
 
-`deck_inputs/deck_config.json` controls which enriched xiehanzi study targets
+`deck_inputs/deck_config.json` controls which enriched hanzi study targets
 are emitted as notes. This first config layer selects target words only; card
 types are still the fixed Meaning, Pinyin, and Write set.
 
 Run from the repository root inside the Nix shell:
 
-    nix-shell --run "python scripts/generate_xiehanzi_deck.py"
+    nix-shell --run "python scripts/generate_hanzi_deck.py"
 """
 
 from __future__ import annotations
@@ -33,12 +33,12 @@ import genanki
 import deck_build_common as common
 from deck_build_common import DeckConfig, GroupDef
 from dragonmapper import transcriptions
-from meaning_html import numbered_to_xiehanzi_display, render_meaning_html
+from meaning_html import numbered_to_display, render_meaning_html
 
 
-DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
+DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_hanzi_enriched.json")
 DEFAULT_DECK_CONFIG = Path("deck_inputs/deck_config.json")
-DEFAULT_REPORT_PATH = Path("build_reports/generate_xiehanzi_report.json")
+DEFAULT_REPORT_PATH = Path("build_reports/generate_hanzi_report.json")
 DEFAULT_GENANKI_TIMESTAMP = 1779251987.6
 DEFAULT_GENERATED_ZIP_DATETIME = (2026, 5, 20, 6, 39, 48)
 DEFAULT_ZIP_DATETIME = (1980, 1, 1, 0, 0, 0)
@@ -219,7 +219,7 @@ def _select_groups_for_word(
 
 
 def _resolve_display_pinyin(form: dict[str, Any]) -> str:
-    return numbered_to_xiehanzi_display(str(form.get("pinyin", "")))
+    return numbered_to_display(str(form.get("pinyin", "")))
 
 
 def _resolve_zhuyin(display_pinyin: str) -> str:
@@ -536,10 +536,10 @@ def build_package(
         "generated_audio_files": generated_audio,
         "failed_audio_generation": failed_audio_generation,
         "removed_zero_length_audio_files": removed_zero_length_audio,
-        "dropped_duplicate_occurrences": len(database.get("xiehanzi", {}).get("dropped_duplicates", [])),
-        "dropped_duplicates": database.get("xiehanzi", {}).get("dropped_duplicates", []),
-        "skipped_extra_duplicate_occurrences": len(database.get("xiehanzi", {}).get("skipped_extra_duplicates", [])),
-        "skipped_extra_duplicates": database.get("xiehanzi", {}).get("skipped_extra_duplicates", []),
+        "dropped_duplicate_occurrences": len(database.get("hanzi", {}).get("dropped_duplicates", [])),
+        "dropped_duplicates": database.get("hanzi", {}).get("dropped_duplicates", []),
+        "skipped_extra_duplicate_occurrences": len(database.get("hanzi", {}).get("skipped_extra_duplicates", [])),
+        "skipped_extra_duplicates": database.get("hanzi", {}).get("skipped_extra_duplicates", []),
         "missing_audio_files": missing_audio,
         "hsk_counts": {
             g.tag_pattern.replace("hsk:", ""): count

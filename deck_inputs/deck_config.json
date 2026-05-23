@@ -1,8 +1,8 @@
 {
-  "schema": "xiehanzi-deck-config-v2",
+  "schema": "hanzi-deck-config-v2",
   "deck": {
-    "name": "Anki Xiehanzi - New HSK (2025)",
-    "output_filename": "Anki-xiehanzi - New HSK (2025).apkg",
+    "name": "汉字 (Hànzì)",
+    "output_filename": "anki-hanzi.apkg",
     "hierarchy": "{name}::{group}::{card_type}"
   },
   "selection": {

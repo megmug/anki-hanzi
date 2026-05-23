@@ -1,6 +1,6 @@
 {
-  "schema": "xiehanzi-apkg-build-invariant-v1",
-  "apkg_filename": "Anki-xiehanzi - New HSK (2025).apkg",
-  "sha256": "377b3d61ff94d91aa3107c13328c0de8d2218bab89eb4c3ffce106d68be59656",
-  "size": 70614399
+  "schema": "hanzi-apkg-build-invariant-v1",
+  "apkg_filename": "anki-hanzi.apkg",
+  "sha256": "09d634c7190d2881be76b33aa3a8d208374779c93348ac5b5a4e05dbc2408b6b",
+  "size": 70593919
 }

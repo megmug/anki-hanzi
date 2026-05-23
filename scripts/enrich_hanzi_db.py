@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 
 """
-Enrich the compact CC-CEDICT master JSON with xiehanzi deck-source data.
+Enrich the compact CC-CEDICT master JSON with hanzi deck-source data.
 
 This is a separate pipeline stage:
 
-    CC-CEDICT master JSON + xiehanzi TSV files -> enriched JSON -> deck generator
+    CC-CEDICT master JSON + hanzi TSV files -> enriched JSON -> deck generator
 
 The enriched output keeps the CC-CEDICT words as the organizing structure and
-adds xiehanzi study targets under matching `forms[].xiehanzi.study_targets`.
+adds hanzi study targets under matching `forms[].hanzi.study_targets`.
 Those entries intentionally mirror the data the Python deck generator currently
 needs, while keeping ingestion independent from APKG generation.
 
 Run from the repository root inside the Nix shell:
 
-    nix-shell --run "python scripts/enrich_xiehanzi_db.py"
+    nix-shell --run "python scripts/enrich_hanzi_db.py"
 """
 
 from __future__ import annotations
@@ -32,14 +32,14 @@ from dragonmapper import transcriptions
 
 
 DEFAULT_MASTER_DB = Path("master_db_output/cc_cedict_master.json")
-DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_xiehanzi_enriched.json")
-DEFAULT_REPORT = Path("master_db_output/xiehanzi_enrichment_report.json")
+DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_hanzi_enriched.json")
+DEFAULT_REPORT = Path("master_db_output/hanzi_enrichment_report.json")
 DEFAULT_DECK_INPUTS_DIR = Path("deck_inputs")
 DEFAULT_HSK_DATA_DIR = DEFAULT_DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Anki xiehanzi"
 DEFAULT_EXTRA_WORDS = DEFAULT_DECK_INPUTS_DIR / "extra_words.tsv"
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
-XIEHANZI_FIELDS = [
+HANZI_FIELDS = [
     "Simplified",
     "Traditional",
     "Pinyin",
@@ -163,7 +163,7 @@ def make_entry(
     row_number: int,
     deck_level: str,
 ) -> dict[str, Any]:
-    if len(row) < len(XIEHANZI_FIELDS):
+    if len(row) < len(HANZI_FIELDS):
         raise ValueError(f"Expected at least 8 TSV columns in {source_file}:{row_number}, got {len(row)}: {row!r}")
 
     simplified = row[0]
@@ -175,7 +175,7 @@ def make_entry(
     frequency_text = row[6]
     meaning_html = row[7]
 
-    tags = ["source:xiehanzi", *level_tags(deck_level, raw_level)]
+    tags = ["source:hanzi", *level_tags(deck_level, raw_level)]
     if source == "Extra":
         tags.append("extra")
 
@@ -215,7 +215,7 @@ def read_word_file(path: Path, source: str, deck_level: str) -> list[dict[str, A
     return entries
 
 
-def load_xiehanzi_entries(hsk_data_dir: Path, extra_words: Path) -> list[dict[str, Any]]:
+def load_hanzi_entries(hsk_data_dir: Path, extra_words: Path) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for level in LEVELS:
         path = hsk_data_dir / f"HSK_Level_{level}.txt"
@@ -248,7 +248,7 @@ def dedupe_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
             "key": printable_key(key),
             "kept": entry_summary(existing),
             "dropped": entry_summary(entry),
-            "reason": "already present in HSK data" if entry["source"] == "Extra" else "duplicate xiehanzi entry",
+            "reason": "already present in HSK data" if entry["source"] == "Extra" else "duplicate hanzi entry",
         }
         if entry["source"] == "Extra":
             skipped_extra_duplicates.append(duplicate_record)
@@ -302,7 +302,7 @@ def build_synthetic_words(missing_entries: list[dict[str, Any]]) -> list[dict[st
                 "simplified": simplified,
                 "traditional_variants": [],
                 "forms_by_pinyin": {},
-                "tags": ["missing:cc-cedict", "source:xiehanzi"],
+                "tags": ["missing:cc-cedict", "source:hanzi"],
             }
             by_simplified[simplified] = word
 
@@ -367,7 +367,7 @@ def study_target_payload(entry: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def find_or_create_xiehanzi_form(
+def find_or_create_hanzi_form(
     word: dict[str, Any],
     entry: dict[str, Any],
     form_stats: dict[str, Any],
@@ -398,7 +398,7 @@ def find_or_create_xiehanzi_form(
         "traditional_variants": [],
         "pinyin": entry["pinyin"],
         "definitions": definitions_from_meaning_html(entry["meaning_html"]),
-        "tags": ["missing:cc-cedict-form", "source:xiehanzi"],
+        "tags": ["missing:cc-cedict-form", "source:hanzi"],
     }
     forms.append(form)
     forms.sort(key=lambda form: form["pinyin"])
@@ -440,10 +440,10 @@ def attach_deck_entries_to_words(
         append_unique(word["tags"], entry["tags"])
         word["tags"].sort()
 
-        xiehanzi = word.setdefault("xiehanzi", {})
-        xiehanzi.setdefault("frequency", entry["frequency"])
+        hanzi = word.setdefault("hanzi", {})
+        hanzi.setdefault("frequency", entry["frequency"])
 
-        form = find_or_create_xiehanzi_form(word, entry, form_stats)
+        form = find_or_create_hanzi_form(word, entry, form_stats)
         prefer_first(form.setdefault("traditional_variants", []), entry["traditional"])
         append_unique(form.setdefault("tags", []), entry["tags"])
         form["tags"].sort()
@@ -475,7 +475,7 @@ def enrich_database(
     base_words = list(master_db.get("words") or [])
     base_word_index = build_word_index(base_words)
 
-    raw_entries = load_xiehanzi_entries(hsk_data_dir=hsk_data_dir, extra_words=extra_words)
+    raw_entries = load_hanzi_entries(hsk_data_dir=hsk_data_dir, extra_words=extra_words)
     deck_entries, dropped_duplicates, skipped_extra_duplicates = dedupe_entries(raw_entries)
 
     missing_raw_before_stubs = [
@@ -494,24 +494,24 @@ def enrich_database(
     missing_deck_after_stubs, form_stats = attach_deck_entries_to_words(words, deck_entries)
 
     enriched = {
-        "schema": "xiehanzi-enriched-lexicon-v1",
+        "schema": "hanzi-enriched-lexicon-v1",
         "base": {
             "schema": master_db.get("schema"),
             "source": master_db.get("source"),
             "summary": master_db.get("summary"),
         },
         "enrichment": {
-            "name": "xiehanzi New HSK (2025)",
-            "fields": XIEHANZI_FIELDS,
+            "name": "hanzi New HSK (2025)",
+            "fields": HANZI_FIELDS,
             "hsk_data_dir": str(hsk_data_dir),
             "extra_words": str(extra_words) if extra_words.exists() else None,
             "dedupe_key": "Simplified + normalized Pinyin",
         },
         "summary": {
             "base_words": len(base_words),
-            "synthetic_xiehanzi_words": len(synthetic_words),
+            "synthetic_hanzi_words": len(synthetic_words),
             "total_words": len(words),
-            "raw_xiehanzi_entries": len(raw_entries),
+            "raw_hanzi_entries": len(raw_entries),
             "deck_entries_after_dedupe": len(deck_entries),
             "dropped_duplicate_entries": len(dropped_duplicates),
             "skipped_extra_duplicates": len(skipped_extra_duplicates),
@@ -519,22 +519,22 @@ def enrich_database(
             "deck_entries_missing_base_word": len(missing_deck_entries_before_stubs),
             "deck_entries_missing_enriched_word": len(missing_deck_after_stubs),
             "deck_entries_by_level": summarize_by_level(deck_entries),
-            "xiehanzi_form_targets": form_stats["matched"] + form_stats["created"],
-            "xiehanzi_form_matches": form_stats["matched"],
-            "xiehanzi_form_pinyin_variant_matches": form_stats["matched_pinyin_variant"],
-            "xiehanzi_form_toneless_matches": form_stats["matched_toneless"],
-            "xiehanzi_form_stubs_created": form_stats["created"],
+            "hanzi_form_targets": form_stats["matched"] + form_stats["created"],
+            "hanzi_form_matches": form_stats["matched"],
+            "hanzi_form_pinyin_variant_matches": form_stats["matched_pinyin_variant"],
+            "hanzi_form_toneless_matches": form_stats["matched_toneless"],
+            "hanzi_form_stubs_created": form_stats["created"],
         },
         "words": words,
-        "xiehanzi": {
-            "study_targets_location": "words[].forms[].xiehanzi.study_targets",
+        "hanzi": {
+            "study_targets_location": "words[].forms[].hanzi.study_targets",
             "dropped_duplicates": dropped_duplicates,
             "skipped_extra_duplicates": skipped_extra_duplicates,
         },
     }
 
     report = {
-        "schema": "xiehanzi-enrichment-report-v1",
+        "schema": "hanzi-enrichment-report-v1",
         "input": str(master_db_path),
         "output": str(output_path),
         "report": str(report_path),
@@ -547,7 +547,7 @@ def enrich_database(
             ],
             "synthetic_words": synthetic_words[:25],
             "missing_deck_entries_after_stubs": missing_deck_after_stubs[:25],
-            "xiehanzi_form_stubs": form_stats["created_entries"],
+            "hanzi_form_stubs": form_stats["created_entries"],
             "dropped_duplicates": dropped_duplicates[:25],
             "skipped_extra_duplicates": skipped_extra_duplicates[:25],
         },
@@ -570,7 +570,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--master-db", type=Path, default=DEFAULT_MASTER_DB, help="Input compact CC-CEDICT master JSON.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output enriched JSON.")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT, help="Output enrichment report JSON.")
-    parser.add_argument("--hsk-data-dir", type=Path, default=DEFAULT_HSK_DATA_DIR, help="Prepared xiehanzi HSK TSV directory.")
+    parser.add_argument("--hsk-data-dir", type=Path, default=DEFAULT_HSK_DATA_DIR, help="Prepared hanzi HSK TSV directory.")
     parser.add_argument("--extra-words", type=Path, default=DEFAULT_EXTRA_WORDS, help="Optional extra words TSV.")
     return parser.parse_args()
 
@@ -581,7 +581,7 @@ def main() -> int:
         print(f"missing master DB: {args.master_db}")
         return 2
     if not args.hsk_data_dir.exists():
-        print(f"missing xiehanzi HSK data dir: {args.hsk_data_dir}")
+        print(f"missing hanzi HSK data dir: {args.hsk_data_dir}")
         return 2
 
     enriched, _report = enrich_database(
@@ -592,7 +592,7 @@ def main() -> int:
         extra_words=args.extra_words,
     )
 
-    print("xiehanzi enrichment generated")
+    print("hanzi enrichment generated")
     print(f"input: {args.master_db}")
     print(f"output: {args.output}")
     print(f"report: {args.report}")

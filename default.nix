@@ -59,7 +59,7 @@ let
       if pathString == root then "" else pkgs.lib.removePrefix (root + "/") pathString;
 
   localBuildSource = pkgs.lib.cleanSourceWith {
-    name = "anki-xiehanzi-local-build-source";
+    name = "anki-hanzi-local-build-source";
     src = ./.;
     filter = path: type:
       let
@@ -93,8 +93,8 @@ let
         && !(type != "directory" && isGeneratedFile);
   };
 
-  xiehanzi-apkg = pkgs.stdenvNoCC.mkDerivation {
-    pname = "anki-xiehanzi-custom-apkg";
+  hanzi-apkg = pkgs.stdenvNoCC.mkDerivation {
+    pname = "anki-hanzi-custom-apkg";
     version = "2025-local";
     src = localBuildSource;
     inherit yarnOfflineCache;
@@ -124,20 +124,20 @@ let
       mkdir -p "$HOME"
 
       python scripts/build_cc_cedict_master_db.py
-      python scripts/enrich_xiehanzi_db.py
+      python scripts/enrich_hanzi_db.py
 
       # Nix source paths use normalized mtimes that can predate ZIP's 1980
       # lower bound. Use the generator's fixed ZIP timestamp for all media
       # files materialized in this transitional store build.
       find . -type f -exec touch -t 202605200639.48 {} +
 
-      python scripts/generate_xiehanzi_deck.py \
+      python scripts/generate_hanzi_deck.py \
         --timestamp 1779251987.6 \
         --zip-generated-datetime 2026-05-20T06:39:48
       python scripts/verify_apkg_hash.py \
-        --apkg "Anki-xiehanzi - New HSK (2025).apkg" \
+        --apkg "anki-hanzi.apkg" \
         --pin deck_inputs/apkg_build_invariant.json \
-        --output build_reports/generate_xiehanzi_hash_verification.json \
+        --output build_reports/generate_hanzi_hash_verification.json \
         --mode ${apkgHashMode}
 
       runHook postBuild
@@ -147,15 +147,15 @@ let
       runHook preInstall
 
       mkdir -p "$out"
-      cp "Anki-xiehanzi - New HSK (2025).apkg" "$out/"
-      cp build_reports/generate_xiehanzi_report.json "$out/"
-      cp build_reports/generate_xiehanzi_hash_verification.json "$out/"
-      cp master_db_output/cc_cedict_xiehanzi_enriched.json "$out/"
-      cp master_db_output/xiehanzi_enrichment_report.json "$out/"
+      cp "anki-hanzi.apkg" "$out/"
+      cp build_reports/generate_hanzi_report.json "$out/"
+      cp build_reports/generate_hanzi_hash_verification.json "$out/"
+      cp master_db_output/cc_cedict_hanzi_enriched.json "$out/"
+      cp master_db_output/hanzi_enrichment_report.json "$out/"
 
       runHook postInstall
     '';
   };
 in
 
-xiehanzi-apkg
+hanzi-apkg

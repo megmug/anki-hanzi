@@ -1,6 +1,6 @@
 # TODO
 
-This fork is moving toward a focused, reproducible custom xiehanzi deck generator.
+This fork is moving toward a focused, reproducible custom hanzi deck generator.
 The current repo still carries several upstream concerns at once: website, generated
 artifacts, old templates, multiple data formats, and overlapping build paths. Keep
 the work incremental.
@@ -32,7 +32,7 @@ the work incremental.
 - Simplify and unify the data basis.
 - Reduce redundant prepared data files and unclear intermediate artifacts.
 - Prototype a pinned CC-CEDICT importer that generates a reproducible master JSON
-  lexicon before applying HSK/xiehanzi/custom overlays.
+  lexicon before applying HSK/hanzi/custom overlays.
 - Evaluate `drkameleon/complete-hsk-vocabulary` as a cleaner primary HSK source.
 - As a first experiment, add `complete-hsk-vocabulary` as a submodule and try to
   reproduce the current custom deck from its `complete.json` data.

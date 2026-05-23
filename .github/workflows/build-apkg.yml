@@ -41,7 +41,7 @@ jobs:
       - name: Upload APKG artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: xiehanzi-apkg-${{ github.sha }}
+          name: hanzi-apkg-${{ github.sha }}
           path: ci-artifacts/
           if-no-files-found: error
           retention-days: 14

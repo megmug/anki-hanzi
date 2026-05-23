@@ -185,7 +185,7 @@ def build_database(source_zip: Path, url: str, expected_sha256: str, output_path
     forms_count = sum(len(word["forms"]) for word in words)
 
     database = {
-        "schema": "xiehanzi-master-lexicon-cc-cedict-v2",
+        "schema": "hanzi-master-lexicon-cc-cedict-v2",
         "source": {
             "name": "CC-CEDICT",
             "url": url,
