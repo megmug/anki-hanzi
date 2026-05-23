@@ -383,7 +383,7 @@ def source_notetypes_from_records(records):
 def is_hanzi_notetype_name(name):
     if not name:
         return False
-    return name.startswith(XIEHANZI_NOTETYPE_PREFIX)
+    return name.startswith(HANZI_NOTETYPE_PREFIX)
 
 
 def remove_empty_source_notetypes(source_notetypes):
@@ -1197,9 +1197,9 @@ try:
     }
 
     status = (
-        "XIEHANZI STATEFUL MIGRATION APPLIED"
+        "HANZI STATEFUL MIGRATION APPLIED"
         if not verify_problems
-        else "XIEHANZI STATEFUL MIGRATION NEEDS ATTENTION"
+        else "HANZI STATEFUL MIGRATION NEEDS ATTENTION"
     )
     lines = [
         status,
@@ -1236,7 +1236,7 @@ except Exception:
         mw.reset()
     except Exception:
         pass
-    report = "XIEHANZI STATEFUL MIGRATION FAILED\n\n" + rollback_note + "\n\n" + tb
+    report = "HANZI STATEFUL MIGRATION FAILED\n\n" + rollback_note + "\n\n" + tb
 
 print(report)
 QApplication.clipboard().setText(report)
