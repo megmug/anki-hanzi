@@ -18,6 +18,7 @@ migration/migration_config.py
 .env.development.local
 .env.test.local
 .env.production.local
+/test
 
 npm-debug.log*
 yarn-debug.log*
@@ -26,7 +27,6 @@ yarn-error.log*
 .yarn-cache
 .npm-cache/
 *generate_hanzi_report.json
-*generate_hanzi_hash_verification.json
 source_comparison_output/
 master_db_output/
 build_reports/
@@ -36,4 +36,3 @@ ci-artifacts/
 .config
 
 anki-hanzi.apkg
-anki-hanzi with sentences.apkg

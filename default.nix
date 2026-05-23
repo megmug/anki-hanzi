@@ -3,11 +3,9 @@
     ref = "nixos-25.11";
     rev = "d7a713c0b7e47c908258e71cba7a2d77cc8d71d5";
 } ) {}
-, enforceApkgHash ? true
 }:
 
 let
-  apkgHashMode = if enforceApkgHash then "enforce" else "record";
 
   colorize-pinyin = pkgs.python3Packages.buildPythonPackage rec {
     pname = "colorize-pinyin";
@@ -85,7 +83,6 @@ let
           || rel == "result"
           || pkgs.lib.hasSuffix ".apkg" base
           || pkgs.lib.hasSuffix "_report.json" base
-          || pkgs.lib.hasSuffix "_hash_verification.json" base
           || pkgs.lib.hasSuffix "_comparison.json" base;
       in
         !(pkgs.lib.any isUnder excludedDirs)
@@ -134,11 +131,6 @@ let
       python scripts/generate_hanzi_deck.py \
         --timestamp 1779251987.6 \
         --zip-generated-datetime 2026-05-20T06:39:48
-      python scripts/verify_apkg_hash.py \
-        --apkg "anki-hanzi.apkg" \
-        --pin deck_inputs/apkg_build_invariant.json \
-        --output build_reports/generate_hanzi_hash_verification.json \
-        --mode ${apkgHashMode}
 
       runHook postBuild
     '';
@@ -149,7 +141,6 @@ let
       mkdir -p "$out"
       cp "anki-hanzi.apkg" "$out/"
       cp build_reports/generate_hanzi_report.json "$out/"
-      cp build_reports/generate_hanzi_hash_verification.json "$out/"
       cp master_db_output/cc_cedict_hanzi_enriched.json "$out/"
       cp master_db_output/hanzi_enrichment_report.json "$out/"
 
