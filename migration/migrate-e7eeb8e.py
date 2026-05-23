@@ -46,11 +46,18 @@ import zipfile
 from collections import Counter
 
 # =============================================================================
-# CONFIGURATION — adjust these two values only
+# CONFIGURATION — read from migration-config.json (or use defaults)
 # =============================================================================
-APKG_PATH = os.path.expanduser("~/Anki-xiehanzi/result/Anki-xiehanzi - New HSK (2025).apkg")
-DECK_ROOT = "Xiehanzi"
-TARGET_PRESET_NAME = "Default"
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_config_path = os.path.join(_script_dir, "migration-config.json")
+_config = {}
+if os.path.exists(_config_path):
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _config = json.load(f)
+
+APKG_PATH = os.path.expanduser(_config.get("apkg_path", "~/Anki-xiehanzi/result/Anki-xiehanzi - New HSK (2025).apkg"))
+DECK_ROOT = _config.get("deck_root", "Xiehanzi")
+TARGET_PRESET_NAME = _config.get("target_preset_name", "Default")
 
 # Derived names (do not edit)
 IMPORTED_ROOT = "Anki Xiehanzi - New HSK (2025)"
