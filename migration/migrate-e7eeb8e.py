@@ -738,12 +738,15 @@ def suspend_target_card(target_card_id, now):
     mw.col.db.execute(f"update cards set {', '.join(parts)} where id=?", *values)
 
 
-def insert_revlog_rows(source_rows, target_card_id):
+def insert_revlog_rows(source_rows, target_card_id, next_id):
+    # Anki may reuse card IDs from graveyard; delete any existing revlog
+    # for this cid before inserting to avoid UNIQUE constraint violations.
+    mw.col.db.execute("delete from revlog where cid = ?", target_card_id)
     for row in source_rows:
         mw.col.db.execute(
             "insert into revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) "
             "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            row["id"],
+            next_id,
             target_card_id,
             -1,
             row["ease"],
@@ -753,6 +756,8 @@ def insert_revlog_rows(source_rows, target_card_id):
             row["time"],
             row["type"],
         )
+        next_id += 1
+    return next_id
 
 
 def count_where(table, column, ids, extra=""):
@@ -950,17 +955,11 @@ try:
 
     copy_columns = [col for col in SCHEDULE_COPY_COLUMNS if col in table_columns("cards")]
     now = int(time.time())
+    next_revlog_id = int(mw.col.db.scalar("select max(id) from revlog") or 0) + 1
 
     mw.col.db.execute("savepoint xiehanzi_stateful_apply")
     state_savepoint_started = True
     try:
-        # If Anki's deck deletion left old revlog rows behind, remove them now:
-        # the source state is already held in memory and the old cards are gone.
-        if old_card_ids:
-            mw.col.db.execute(
-                f"delete from revlog where cid in {ids2str_local(old_card_ids)}"
-            )
-
         full_state_copied = 0
         revlog_rows_inserted = 0
         suspended_set = 0
@@ -972,7 +971,7 @@ try:
 
             if source_item["touched"]:
                 copy_full_card_state(source_item["card"], target_card_id, copy_columns, now)
-                insert_revlog_rows(source_item["revlog"], target_card_id)
+                next_revlog_id = insert_revlog_rows(source_item["revlog"], target_card_id, next_revlog_id)
                 full_state_copied += 1
                 revlog_rows_inserted += len(source_item["revlog"])
             elif source_item["suspended"]:
@@ -984,6 +983,13 @@ try:
         imported_root_did = deck_id_by_name(imported_root)
         if imported_root != FINAL_ROOT:
             mw.col.decks.rename(imported_root_did, FINAL_ROOT)
+
+        # Clean up orphaned revlog rows (Anki may reuse card IDs from graveyard,
+        # so deleting by old_card_ids is unreliable. Delete any revlog row whose
+        # card no longer exists.)
+        mw.col.db.execute(
+            "delete from revlog where cid not in (select id from cards)"
+        )
 
         mw.col.db.execute("release savepoint xiehanzi_stateful_apply")
         state_savepoint_started = False
@@ -1072,7 +1078,12 @@ try:
 
     skipped_touched_revlog_rows = sum(record["revlog_count"] for record in touched_unmatched)
     final_revlog_on_final_cards = count_where("revlog", "cid", final_card_ids)
-    old_revlog_left = count_where("revlog", "cid", old_card_ids)
+    orphaned_revlog_rows = int(
+        mw.col.db.scalar(
+            "select count(*) from revlog where cid not in (select id from cards)"
+        )
+        or 0
+    )
     final_target_only_keys = final_match_plan["target_only_keys"]
     skipped_touched_kind_counts = Counter(record.get("kind") for record in touched_unmatched)
     loose_match_samples = []
@@ -1094,8 +1105,8 @@ try:
         verify_problems.append(f"Revlog mismatches: {len(revlog_mismatches)}")
     if suspended_mismatches:
         verify_problems.append(f"Suspended mismatches: {len(suspended_mismatches)}")
-    if old_revlog_left:
-        verify_problems.append(f"Old revlog rows still present: {old_revlog_left}")
+    if orphaned_revlog_rows:
+        verify_problems.append(f"Orphaned revlog rows still present: {orphaned_revlog_rows}")
     if preset_counts != Counter({target_preset_id: len(deck_ids_under(FINAL_ROOT))}):
         verify_problems.append(f"Deck preset counts unexpected: {dict(preset_counts)}")
     if final_plus_notetype_names:
@@ -1150,7 +1161,7 @@ try:
             "xiehanzi_notetype_names": final_xiehanzi_notetype_names,
             "queue_counts": dict(sorted(queue_counts.items())),
             "revlog_rows_on_final_cards": final_revlog_on_final_cards,
-            "old_revlog_rows_left": old_revlog_left,
+            "orphaned_revlog_rows": orphaned_revlog_rows,
             "preset_counts": dict(preset_counts),
         },
         "samples": {
