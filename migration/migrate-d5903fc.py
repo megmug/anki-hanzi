@@ -46,18 +46,24 @@ import zipfile
 from collections import Counter
 
 # =============================================================================
-# CONFIGURATION — read from migration-config.json (or use defaults)
+# CONFIGURATION — edit these values before running the script
 # =============================================================================
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-_config_path = os.path.join(_script_dir, "migration-config.json")
-_config = {}
-if os.path.exists(_config_path):
-    with open(_config_path, "r", encoding="utf-8") as f:
-        _config = json.load(f)
 
-APKG_PATH = os.path.expanduser(_config.get("apkg_path", "~/anki-hanzi/result/anki-hanzi.apkg"))
-DECK_ROOT = _config.get("deck_root", "Xiehanzi")
-TARGET_PRESET_NAME = _config.get("target_preset_name", "Default")
+CONFIG = {
+    # Absolute path to the newly built APKG you want to migrate to.
+    "apkg_path": "~/anki-hanzi/result/anki-hanzi.apkg",
+
+    # Name of the existing deck root in your Anki collection.
+    "deck_root": "汉字 (Hànzì)",
+
+    # Name of the deck options preset to apply after migration.
+    "target_preset_name": "Default",
+}
+
+# Derive working values from CONFIG above (do not edit below this line)
+APKG_PATH = os.path.expanduser(CONFIG["apkg_path"])
+DECK_ROOT = CONFIG["deck_root"]
+TARGET_PRESET_NAME = CONFIG["target_preset_name"]
 
 # Derived names (do not edit)
 IMPORTED_ROOT = "汉字 (Hànzì)"
