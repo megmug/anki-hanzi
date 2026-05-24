@@ -16,7 +16,7 @@ jobs:
   build-apkg:
     name: Build APKG with Nix
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 600
 
     steps:
       - name: Checkout repository
