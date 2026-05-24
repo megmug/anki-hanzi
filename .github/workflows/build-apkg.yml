@@ -29,6 +29,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command
+            sandbox = false
 
       - name: Build APKG package
         run: nix-build --out-link result
