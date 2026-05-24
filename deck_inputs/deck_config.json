@@ -52,7 +52,6 @@
   ],
   "templates_dir": "deck_inputs/card_templates",
   "audio": {
-    "voice": "zh-CN-XiaoxiaoNeural",
-    "filename_pattern": "cmn-{simplified}.mp3"
+    "engine": "kokoro"
   }
 }

@@ -63,10 +63,26 @@ class GroupDef:
     name: str
 
 
+# Hardcoded voice pools — not configurable per deck to keep builds predictable
+KOKORO_FEMALE_VOICES = ("zf_xiaoxiao", "zf_xiaoni", "zf_xiaobei", "zf_xiaoyi")
+KOKORO_MALE_VOICES = ("zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang")
+# edge-tts: only voices verified to actually return audio (many zh-CN voices fail)
+EDGE_TTS_FEMALE_VOICES = (
+    "zh-CN-XiaoxiaoNeural",
+    "zh-CN-XiaoyiNeural",
+)
+EDGE_TTS_MALE_VOICES = (
+    "zh-CN-YunjianNeural",
+    "zh-CN-YunxiNeural",
+    "zh-CN-YunxiaNeural",
+)
+AUDIO_FILENAME_FEMALE = "cmn-{simplified}_f.mp3"
+AUDIO_FILENAME_MALE = "cmn-{simplified}_m.mp3"
+
+
 @dataclass(frozen=True)
 class AudioConfig:
-    voice: str = VOICE
-    filename_pattern: str = "cmn-{simplified}.mp3"
+    engine: str = "kokoro"  # "kokoro" or "edge_tts"
 
 
 @dataclass(frozen=True)
@@ -111,8 +127,11 @@ class DeckConfig:
             card_type=card_type,
         )
 
-    def audio_filename(self, simplified: str) -> str:
-        return self.audio.filename_pattern.format(simplified=simplified)
+    def audio_filenames(self, simplified: str) -> tuple[str, str]:
+        return (
+            AUDIO_FILENAME_FEMALE.format(simplified=simplified),
+            AUDIO_FILENAME_MALE.format(simplified=simplified),
+        )
 
     def template_files(self, card_type: str) -> tuple[Path, Path]:
         tdir = self.templates_dir_path
@@ -182,8 +201,7 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
         card_types=tuple(raw.get("card_types", CARD_TYPES)),
         templates_dir=str(raw.get("templates_dir", str(CARD_TEMPLATES_DIR))),
         audio=AudioConfig(
-            voice=str(audio_section.get("voice", VOICE)),
-            filename_pattern=str(audio_section.get("filename_pattern", "cmn-{simplified}.mp3")),
+            engine=str(audio_section.get("engine", AudioConfig.engine)),
         ),
         selection_tags=selection_tags,
         additional_simplified=additional_simplified,

@@ -7,7 +7,7 @@
 
 let
 
-  colorize-pinyin = pkgs.python3Packages.buildPythonPackage rec {
+  colorize-pinyin = pkgs.python312Packages.buildPythonPackage rec {
     pname = "colorize-pinyin";
     version = "2.1.1";
     format = "setuptools";
@@ -21,7 +21,7 @@ let
     doCheck = false;
   };
 
-  pinyin-tone-converter = pkgs.python3Packages.buildPythonPackage rec {
+  pinyin-tone-converter = pkgs.python312Packages.buildPythonPackage rec {
     pname = "pinyin-tone-converter";
     version = "1.0.2";
     format = "setuptools";
@@ -35,13 +35,26 @@ let
     doCheck = false;
   };
 
-  pythonEnv = pkgs.python3.withPackages (pythonPackages: with pythonPackages; [
+  # Kokoro and its heavy transitive dependencies are not available in
+  # nixpkgs. We install them via pip during the buildPhase into an
+  # isolated prefix. Network access is required (__noChroot = true).
+  pythonBase = pkgs.python312;
+
+  pythonEnv = pythonBase.withPackages (ps: with ps; [
     ipykernel
     colorize-pinyin
     pinyin-tone-converter
     dragonmapper
     edge-tts
     genanki
+    pip
+    setuptools
+    wheel
+    # Core deps already present in nixpkgs that Kokoro reuses
+    torch
+    numpy
+    scipy
+    soundfile
   ]);
 
   yarnOfflineCache = pkgs.fetchYarnDeps {
@@ -76,6 +89,7 @@ let
           "complete-hsk-vocabulary"
           "node_modules"
           "source_comparison_output"
+          "test"
         ];
         isMasterDbGenerated = pkgs.lib.hasPrefix "master_db_output/" rel;
         isGeneratedFile =
@@ -102,7 +116,14 @@ let
       pythonEnv
       pkg-config
       gnumake
+      espeak-ng
+      ffmpeg
     ];
+
+    # Allow network access during build so pip can install Kokoro
+    # and download HuggingFace model weights.
+    # NOTE: Requires sandbox = false or relaxed in nix.conf
+    __noChroot = true;
 
     configurePhase = ''
       runHook preConfigure
@@ -119,6 +140,31 @@ let
 
       export HOME="$TMPDIR/home"
       mkdir -p "$HOME"
+
+      # huggingface_hub/httpx needs CA certs for HTTPS downloads
+      export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+      export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+
+      # Isolate pip-installed packages so they don't clash with Nix python
+      PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
+      PIP_PREFIX="$TMPDIR/kokoro-pip"
+      SITE_PACKAGES="$PIP_PREFIX/lib/python''${PYTHON_VERSION}/site-packages"
+      export PIP_PREFIX="$PIP_PREFIX"
+      export PYTHONPATH="$SITE_PACKAGES:$PYTHONPATH"
+      export PATH="$PIP_PREFIX/bin:$PATH"
+      mkdir -p "$PIP_PREFIX"
+
+      # Install Kokoro + Chinese G2P deps if not present
+      if ! python -c "import kokoro" 2>/dev/null; then
+        echo "=== Installing Kokoro and Chinese G2P dependencies ==="
+        pip install --prefix "$PIP_PREFIX" --no-cache-dir \
+          kokoro misaki[zh] ordered-set pypinyin cn2an jieba
+        if ! python -c "import kokoro" 2>/dev/null; then
+          echo "ERROR: Kokoro installation failed"
+          exit 1
+        fi
+        echo "=== Kokoro installation complete ==="
+      fi
 
       python scripts/build_cc_cedict_master_db.py
       python scripts/enrich_hanzi_db.py
@@ -149,4 +195,4 @@ let
   };
 in
 
-hanzi-apkg
+  hanzi-apkg

@@ -52,11 +52,19 @@ class EnrichedWordEntry:
     pinyin: str
     zhuyin: str
     definition_html: str
-    audio_filename: str
+    audio_filename_female: str
+    audio_filename_male: str
 
     @property
     def audio_ref(self) -> str:
-        return f"[sound:{self.audio_filename}]"
+        return (
+            f"[sound:{self.audio_filename_female}]"
+            f"[sound:{self.audio_filename_male}]"
+        )
+
+    @property
+    def audio_filenames(self) -> tuple[str, str]:
+        return (self.audio_filename_female, self.audio_filename_male)
 
     def fields(self) -> list[str]:
         return [
@@ -154,8 +162,17 @@ def load_deck_selection(config_path: Path | None, config: DeckConfig) -> DeckSel
     if not isinstance(selection, dict):
         raise ValueError("deck config selection must be an object")
 
+    # Support legacy "tags" field (e.g. "hsk:1") as alias for hsk_levels
+    raw_levels = selection.get("hsk_levels")
+    if raw_levels is None:
+        tags = selection.get("tags")
+        if isinstance(tags, str) and tags.startswith("hsk:"):
+            raw_levels = [tags[len("hsk:"):]]
+        else:
+            raw_levels = "all"
+
     return DeckSelection(
-        hsk_levels=parse_hsk_levels(selection.get("hsk_levels", "all"), known_levels),
+        hsk_levels=parse_hsk_levels(raw_levels, known_levels),
         additional_simplified=parse_simplified_list(
             selection.get("additional_simplified", []),
             "additional_simplified",
@@ -278,7 +295,8 @@ def load_enriched_entries(
                     pinyin=display_pinyin,
                     zhuyin=zhuyin,
                     definition_html=rendered_definition_html,
-                    audio_filename=config.audio_filename(simplified),
+                    audio_filename_female=config.audio_filenames(simplified)[0],
+                    audio_filename_male=config.audio_filenames(simplified)[1],
                 )
 
                 group_entries[group_tag].append(entry)
@@ -301,7 +319,8 @@ def load_enriched_entries(
                     pinyin=display_pinyin,
                     zhuyin=zhuyin,
                     definition_html=rendered_definition_html,
-                    audio_filename=config.audio_filename(simplified),
+                    audio_filename_female=config.audio_filenames(simplified)[0],
+                    audio_filename_male=config.audio_filenames(simplified)[1],
                 )
 
                 group_entries[extra_group_tag].append(entry)
@@ -323,57 +342,169 @@ def load_enriched_entries(
     return group_entries, database, selection_report
 
 
-def find_audio_path(entry: EnrichedWordEntry) -> Path | None:
-    candidates = [
-        common.AUDIO_DIR / entry.audio_filename,
-        common.EXTRA_AUDIO_DIR / entry.audio_filename,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+def _prepare_audio_dir() -> list[str]:
+    """Remove stale extra-audio files so nothing leaks between builds."""
+    removed: list[str] = []
+    if common.EXTRA_AUDIO_DIR.exists():
+        for path in common.EXTRA_AUDIO_DIR.glob("*"):
+            if path.is_file():
+                path.unlink()
+                removed.append(str(path))
+    common.EXTRA_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    return removed
 
 
-def generated_audio_path(entry: EnrichedWordEntry) -> Path:
-    return common.EXTRA_AUDIO_DIR / entry.audio_filename
+def _generate_audio_kokoro(
+    entries: list[EnrichedWordEntry],
+    config: common.DeckConfig,
+    removed: list[str],
+) -> tuple[list[str], list[dict[str, str]], list[str]]:
+    import numpy as np
+    import soundfile as sf
+    from kokoro import KPipeline
 
+    try:
+        pipeline = KPipeline(lang_code="z")
+    except Exception:
+        import traceback
+        return [], [{"error": f"Failed to load Kokoro pipeline:\n{traceback.format_exc()}"}], removed
 
-def generate_missing_audio(entries: list[EnrichedWordEntry], voice: str) -> tuple[list[str], list[dict[str, str]], list[str]]:
-    removed_zero_length = common.remove_zero_length_audio_files()
     generated: list[str] = []
     failed: list[dict[str, str]] = []
-    seen_filenames: set[str] = set()
+    seen_words: set[str] = set()
+
+    total_words = len({e.simplified.strip() for e in entries if e.simplified.strip()})
+    progress_interval = max(1, total_words // 100)
 
     for entry in entries:
-        if find_audio_path(entry):
+        word = entry.simplified.strip()
+        if not word or word in seen_words:
             continue
-        if not entry.simplified.strip() or entry.audio_filename in seen_filenames:
-            continue
-        seen_filenames.add(entry.audio_filename)
+        seen_words.add(word)
 
-        output_path = generated_audio_path(entry)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            communicate = edge_tts.Communicate(entry.simplified.strip(), voice)
-            communicate.save_sync(str(output_path))
-            if output_path.exists() and output_path.stat().st_size > 0:
+        female_voice = common.KOKORO_FEMALE_VOICES[0]
+        male_voice = common.KOKORO_MALE_VOICES[0]
+
+        for gender, voice, filename in [
+            ("female", female_voice, entry.audio_filename_female),
+            ("male", male_voice, entry.audio_filename_male),
+        ]:
+            output_path = common.EXTRA_AUDIO_DIR / filename
+            try:
+                results = list(pipeline(word, voice=voice, speed=1.0))
+                segments = [r.audio for r in results if r.audio is not None]
+                if not segments:
+                    failed.append({
+                        "word": word,
+                        "gender": gender,
+                        "voice": voice,
+                        "error": "Kokoro produced no audio",
+                    })
+                    continue
+                audio = np.concatenate(segments)
+                sf.write(output_path, audio, 24000)
+                generated.append(str(output_path))
+            except Exception as exc:
+                failed.append({
+                    "word": word,
+                    "gender": gender,
+                    "voice": voice,
+                    "error": str(exc),
+                })
+
+        if len(seen_words) % progress_interval == 0:
+            pct = len(seen_words) * 100 // total_words
+            print(f"  Audio progress: {len(seen_words)}/{total_words} words ({pct}%)", flush=True)
+
+    print(f"  Audio generation complete: {len(generated)} files, {len(failed)} failures")
+    return generated, failed, removed
+
+
+def _generate_audio_edge_tts(
+    entries: list[EnrichedWordEntry],
+    config: common.DeckConfig,
+    removed: list[str],
+) -> tuple[list[str], list[dict[str, str]], list[str]]:
+    import time
+    import edge_tts
+
+    generated: list[str] = []
+    failed: list[dict[str, str]] = []
+    seen_words: set[str] = set()
+
+    total_words = len({e.simplified.strip() for e in entries if e.simplified.strip()})
+    progress_interval = max(1, total_words // 100)
+
+    def _generate_one(word: str, voice: str, output_path: Path) -> str | None:
+        """Try to generate audio with retries. Returns error string or None on success."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                communicate = edge_tts.Communicate(word, voice)
+                communicate.save_sync(str(output_path))
+                if output_path.exists() and output_path.stat().st_size > 0:
+                    return None
+                common.remove_failed_audio_output(output_path)
+                return "edge-tts produced no audio data"
+            except Exception as exc:
+                common.remove_failed_audio_output(output_path)
+                if attempt < max_retries - 1:
+                    delay = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                    print(f"    Retry {attempt + 1}/{max_retries} for '{word}' ({voice}) after {delay}s: {exc}", flush=True)
+                    time.sleep(delay)
+                else:
+                    return str(exc)
+        return "max retries exceeded"
+
+    for entry in entries:
+        word = entry.simplified.strip()
+        if not word or word in seen_words:
+            continue
+        seen_words.add(word)
+
+        female_voice = common.EDGE_TTS_FEMALE_VOICES[0]
+        male_voice = common.EDGE_TTS_MALE_VOICES[0]
+
+        for gender, voice, filename in [
+            ("female", female_voice, entry.audio_filename_female),
+            ("male", male_voice, entry.audio_filename_male),
+        ]:
+            output_path = common.EXTRA_AUDIO_DIR / filename
+            error = _generate_one(word, voice, output_path)
+            if error is None:
                 generated.append(str(output_path))
             else:
-                common.remove_failed_audio_output(output_path)
                 failed.append({
-                    "word": entry.simplified,
-                    "file": str(output_path),
-                    "error": "edge-tts produced no audio data",
+                    "word": word,
+                    "gender": gender,
+                    "voice": voice,
+                    "error": error,
                 })
-        except Exception as exc:
-            common.remove_failed_audio_output(output_path)
-            failed.append({
-                "word": entry.simplified,
-                "file": str(output_path),
-                "error": str(exc),
-            })
 
-    return generated, failed, removed_zero_length
+        if len(seen_words) % progress_interval == 0:
+            pct = len(seen_words) * 100 // total_words
+            print(f"  Audio progress: {len(seen_words)}/{total_words} words ({pct}%)", flush=True)
+
+    print(f"  Audio generation complete: {len(generated)} files, {len(failed)} failures")
+    return generated, failed, removed
+
+
+def generate_audio(entries: list[EnrichedWordEntry], config: common.DeckConfig) -> tuple[list[str], list[dict[str, str]], list[str]]:
+    """Generate fresh dual-voice audio for all entries.
+
+    Always regenerates every audio file so builds are self-contained.
+    Uses fixed voices (first in the hardcoded voice lists).
+    Backend is controlled by config.audio.engine ("kokoro", "edge_tts", or "off").
+    """
+    removed = _prepare_audio_dir()
+
+    engine = config.audio.engine.lower().replace("-", "_")
+    if engine == "off":
+        print("  Audio generation disabled (engine: off)")
+        return [], [], removed
+    if engine == "edge_tts":
+        return _generate_audio_edge_tts(entries, config, removed)
+    return _generate_audio_kokoro(entries, config, removed)
 
 
 def collect_media(entries: list[EnrichedWordEntry], static_media: list[str]) -> tuple[list[str], list[str]]:
@@ -382,14 +513,14 @@ def collect_media(entries: list[EnrichedWordEntry], static_media: list[str]) -> 
     seen_media_names = {Path(path).name for path in media}
 
     for entry in entries:
-        audio_path = find_audio_path(entry)
-        if audio_path:
-            media_name = audio_path.name
-            if media_name not in seen_media_names:
-                seen_media_names.add(media_name)
-                media.append(str(audio_path))
-        else:
-            missing_audio.append(entry.audio_filename)
+        for filename in entry.audio_filenames:
+            path = common.EXTRA_AUDIO_DIR / filename
+            if path.exists():
+                if filename not in seen_media_names:
+                    seen_media_names.add(filename)
+                    media.append(str(path))
+            else:
+                missing_audio.append(filename)
 
     return media, sorted(set(missing_audio))
 
@@ -491,7 +622,7 @@ def build_package(
     all_entries = [entry for entries in group_entries.values() for entry in entries]
 
     static_media = config.static_media()
-    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_missing_audio(all_entries, config.audio.voice)
+    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_audio(all_entries, config)
     models = common.create_models(config)
     decks = build_decks(config, models, group_entries)
     media_files, missing_audio = collect_media(all_entries, static_media)
@@ -526,7 +657,9 @@ def build_package(
         "total_cards": len(all_entries) * len(config.card_types),
         "decks": len(decks),
         "audio_files_packaged": len(media_files) - len(static_media),
-        "audio_voice": config.audio.voice,
+        "audio_engine": "kokoro",
+        "audio_female_voices": list(common.KOKORO_FEMALE_VOICES if config.audio.engine == "kokoro" else common.EDGE_TTS_FEMALE_VOICES),
+        "audio_male_voices": list(common.KOKORO_MALE_VOICES if config.audio.engine == "kokoro" else common.EDGE_TTS_MALE_VOICES),
         "hanzi_writer_version": common.read_hanzi_writer_package_version(),
         "hanzi_writer_bundle": str(common.HANZI_WRITER_BUNDLE),
         "timestamp": timestamp,
