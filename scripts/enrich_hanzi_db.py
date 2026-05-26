@@ -175,7 +175,7 @@ def make_entry(
     frequency_text = row[6]
     meaning_html = row[7]
 
-    tags = ["source:hanzi", *level_tags(deck_level, raw_level)]
+    tags = ["source:xiehanzi", *level_tags(deck_level, raw_level)]
     if source == "Extra":
         tags.append("extra")
 
@@ -302,7 +302,7 @@ def build_synthetic_words(missing_entries: list[dict[str, Any]]) -> list[dict[st
                 "simplified": simplified,
                 "traditional_variants": [],
                 "forms_by_pinyin": {},
-                "tags": ["missing:cc-cedict", "source:hanzi"],
+                "tags": ["source:xiehanzi"],
             }
             by_simplified[simplified] = word
 
@@ -398,7 +398,7 @@ def find_or_create_hanzi_form(
         "traditional_variants": [],
         "pinyin": entry["pinyin"],
         "definitions": definitions_from_meaning_html(entry["meaning_html"]),
-        "tags": ["missing:cc-cedict-form", "source:hanzi"],
+        "tags": ["source:xiehanzi"],
     }
     forms.append(form)
     forms.sort(key=lambda form: form["pinyin"])

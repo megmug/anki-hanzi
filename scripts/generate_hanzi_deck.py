@@ -31,7 +31,7 @@ import edge_tts
 import genanki
 
 import deck_build_common as common
-from deck_build_common import DeckConfig, GroupDef
+from deck_build_common import DeckConfig
 from dragonmapper import transcriptions
 from meaning_html import numbered_to_display, render_meaning_html
 
@@ -54,6 +54,7 @@ class EnrichedWordEntry:
     definition_html: str
     audio_filename_female: str
     audio_filename_male: str
+    tags: tuple[str, ...] = ()
 
     @property
     def audio_ref(self) -> str:
@@ -80,9 +81,9 @@ class EnrichedWordEntry:
 
 @dataclass(frozen=True)
 class DeckSelection:
-    hsk_levels: tuple[str, ...]
-    additional_simplified: frozenset[str]
-    include_all_extra: bool
+    mode: str
+    tags: tuple[str, ...]
+    individual_simplified: frozenset[str]
     config_path: str | None
     config_found: bool
 
@@ -90,37 +91,14 @@ class DeckSelection:
         return {
             "config_path": self.config_path,
             "config_found": self.config_found,
-            "hsk_levels": list(self.hsk_levels),
-            "additional_simplified": sorted(self.additional_simplified),
-            "include_all_extra": self.include_all_extra,
+            "mode": self.mode,
+            "tags": list(self.tags),
+            "individual_simplified": sorted(self.individual_simplified),
         }
 
 
 def normalize_simplified(value: Any) -> str:
     return str(value or "").strip()
-
-
-def parse_hsk_levels(raw_levels: Any, known_levels: tuple[str, ...]) -> tuple[str, ...]:
-    if raw_levels is None or raw_levels == "all":
-        return known_levels
-
-    if isinstance(raw_levels, str):
-        raw_levels = [raw_levels]
-
-    if not isinstance(raw_levels, list):
-        raise ValueError("deck config selection.hsk_levels must be \"all\" or a list")
-
-    levels: list[str] = []
-    for raw_level in raw_levels:
-        level = str(raw_level).strip()
-        if level == "all":
-            return known_levels
-        if level not in known_levels:
-            raise ValueError(f"unknown HSK level in deck config: {level}")
-        if level not in levels:
-            levels.append(level)
-
-    return tuple(levels)
 
 
 def parse_simplified_list(value: Any, field_name: str) -> frozenset[str]:
@@ -135,104 +113,54 @@ def parse_simplified_list(value: Any, field_name: str) -> frozenset[str]:
     )
 
 
-def _deck_levels_from_config(config: DeckConfig) -> tuple[str, ...]:
-    levels: list[str] = []
-    for group in config.groups:
-        if group.tag_pattern.startswith("hsk:"):
-            level = group.tag_pattern[len("hsk:"):]
-            if level and level not in levels:
-                levels.append(level)
-    return tuple(levels)
-
-
-def load_deck_selection(config_path: Path | None, config: DeckConfig) -> DeckSelection:
-    known_levels = _deck_levels_from_config(config)
-
+def load_deck_selection(config_path: Path | None) -> DeckSelection:
     if config_path is None or not config_path.exists():
-        return DeckSelection(
-            hsk_levels=known_levels,
-            additional_simplified=frozenset(),
-            include_all_extra=True,
-            config_path=str(config_path) if config_path is not None else None,
-            config_found=False,
-        )
+        raise ValueError("deck config file is required but not found")
 
     raw = json.loads(config_path.read_text(encoding="utf-8"))
-    selection = raw.get("selection", raw)
+    selection = raw.get("selection")
+    if selection is None:
+        raise ValueError("deck config must define a 'selection' object")
     if not isinstance(selection, dict):
         raise ValueError("deck config selection must be an object")
 
-    # Support legacy "tags" field (e.g. "hsk:1") as alias for hsk_levels
-    raw_levels = selection.get("hsk_levels")
-    if raw_levels is None:
-        tags = selection.get("tags")
-        if isinstance(tags, str) and tags.startswith("hsk:"):
-            raw_levels = [tags[len("hsk:"):]]
-        else:
-            raw_levels = "all"
+    tags_raw = selection.get("tags", [])
+    if isinstance(tags_raw, str):
+        tags = (tags_raw,)
+    elif isinstance(tags_raw, list):
+        tags = tuple(str(t) for t in tags_raw)
+    else:
+        tags = ()
 
     return DeckSelection(
-        hsk_levels=parse_hsk_levels(raw_levels, known_levels),
-        additional_simplified=parse_simplified_list(
-            selection.get("additional_simplified", []),
-            "additional_simplified",
+        mode=str(selection.get("mode", "")),
+        tags=tags,
+        individual_simplified=parse_simplified_list(
+            selection.get("individual_simplified", []),
+            "individual_simplified",
         ),
-        include_all_extra=bool(selection.get("include_all_extra", False)),
         config_path=str(config_path),
         config_found=True,
     )
 
 
-def should_include_target(simplified: str, deck_level: str, selection: DeckSelection) -> bool:
-    if deck_level in selection.hsk_levels:
-        return True
-    if simplified in selection.additional_simplified:
-        return True
-    return deck_level.lower() == "extra" and selection.include_all_extra
-
-
 def build_decks(
     config: DeckConfig,
     models: dict[str, genanki.Model],
-    group_entries: dict[str, list[EnrichedWordEntry]],
+    entries: list[EnrichedWordEntry],
 ) -> list[genanki.Deck]:
     decks: list[genanki.Deck] = []
 
-    for group in config.groups:
-        entries = group_entries.get(group.tag_pattern, [])
-        if not entries:
-            continue
-        for card_type in config.card_types:
-            decks.append(
-                common.create_deck(
-                    deck_name=config.resolve_deck_name(group.name, card_type),
-                    model=models[card_type],
-                    entries=entries,
-                )
+    for card_type in config.card_types:
+        decks.append(
+            common.create_deck(
+                deck_name=f"{common.DECK_ROOT}::{card_type}",
+                model=models[card_type],
+                entries=entries,
             )
+        )
 
     return decks
-
-
-def _select_groups_for_word(
-    word: dict[str, Any],
-    config: DeckConfig,
-    selection: DeckSelection,
-) -> dict[str, list[tuple[dict[str, Any], GroupDef]]]:
-    result: dict[str, list[tuple[dict[str, Any], GroupDef]]] = {}
-    simplified = normalize_simplified(word.get("simplified", ""))
-
-    for form in word.get("forms", []):
-        form_tags = set(form.get("tags", []))
-        for group in config.groups:
-            level_str = group.tag_pattern.replace("hsk:", "") if group.tag_pattern.startswith("hsk:") else group.tag_pattern
-            if not should_include_target(simplified, level_str, selection):
-                continue
-            if group.tag_pattern in form_tags:
-                result.setdefault(group.tag_pattern, []).append((form, group))
-                break  # Only assign to the first/lowest matching group
-
-    return result
 
 
 def _resolve_display_pinyin(form: dict[str, Any]) -> str:
@@ -250,96 +178,85 @@ def load_enriched_entries(
     enriched_db_path: Path,
     selection: DeckSelection,
     config: DeckConfig,
-) -> tuple[dict[str, list[EnrichedWordEntry]], dict[str, Any], dict[str, Any]]:
+) -> tuple[list[EnrichedWordEntry], dict[str, Any], dict[str, Any]]:
     database = json.loads(enriched_db_path.read_text(encoding="utf-8"))
-    group_entries: dict[str, list[EnrichedWordEntry]] = {
-        group.tag_pattern: [] for group in config.groups
-    }
-    matched_additional_simplified: set[str] = set()
+    entries: list[EnrichedWordEntry] = []
+    matched_individual_simplified: set[str] = set()
     rendered_meaning_html_used = 0
-    extra_group_tag = "extra"
+    seen_simplified: set[str] = set()
 
     for word in database.get("words", []):
         simplified = normalize_simplified(word["simplified"])
 
-        is_additional = simplified in selection.additional_simplified
+        # Collect all tags from word-level and all forms
+        all_tags: set[str] = set(word.get("tags", []))
+        for form in word.get("forms", []):
+            all_tags.update(form.get("tags", []))
 
-        has_any_target = any(
-            group.tag_pattern in form.get("tags", [])
-            for form in word.get("forms", [])
-            for group in config.groups
-        )
-        if not has_any_target and not is_additional:
+        is_individual = simplified in selection.individual_simplified
+        mode = selection.mode
+
+        if mode == "all":
+            # Include every word in the database
+            pass
+        elif mode == "tagged":
+            if not (all_tags & set(selection.tags)) and not is_individual:
+                continue
+        else:
+            if not is_individual:
+                continue
+
+        if is_individual:
+            matched_individual_simplified.add(simplified)
+
+        # Deduplicate: only one entry per simplified character
+        if simplified in seen_simplified:
             continue
+        seen_simplified.add(simplified)
 
         rendered_definition_html = render_meaning_html(word)
 
-        form_groups = _select_groups_for_word(word, config, selection)
+        # Use the first form for pinyin/traditional, or fall back to word-level data
+        forms = word.get("forms", [])
+        if forms:
+            form = forms[0]
+            traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
+            traditional = traditional_variants[0] if traditional_variants else simplified
+            display_pinyin = _resolve_display_pinyin(form)
+        else:
+            traditional = simplified
+            display_pinyin = ""
 
-        for group_tag, form_group_pairs in form_groups.items():
-            for form, group in form_group_pairs:
-                if is_additional:
-                    matched_additional_simplified.add(simplified)
+        zhuyin = _resolve_zhuyin(display_pinyin)
 
-                traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
-                traditional = traditional_variants[0] if traditional_variants else simplified
+        rendered_meaning_html_used += 1
 
-                rendered_meaning_html_used += 1
+        entry = EnrichedWordEntry(
+            simplified=simplified,
+            traditional=str(traditional),
+            pinyin=display_pinyin,
+            zhuyin=zhuyin,
+            definition_html=rendered_definition_html,
+            audio_filename_female=config.audio_filenames(simplified)[0],
+            audio_filename_male=config.audio_filenames(simplified)[1],
+            tags=tuple(sorted(all_tags)),
+        )
+        entries.append(entry)
 
-                display_pinyin = _resolve_display_pinyin(form)
-                zhuyin = _resolve_zhuyin(display_pinyin)
-
-                entry = EnrichedWordEntry(
-                    simplified=simplified,
-                    traditional=str(traditional),
-                    pinyin=display_pinyin,
-                    zhuyin=zhuyin,
-                    definition_html=rendered_definition_html,
-                    audio_filename_female=config.audio_filenames(simplified)[0],
-                    audio_filename_male=config.audio_filenames(simplified)[1],
-                )
-
-                group_entries[group_tag].append(entry)
-
-        if is_additional and not form_groups and extra_group_tag in group_entries:
-            matched_additional_simplified.add(simplified)
-
-            for form in word.get("forms", []):
-                traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
-                traditional = traditional_variants[0] if traditional_variants else simplified
-
-                rendered_meaning_html_used += 1
-
-                display_pinyin = _resolve_display_pinyin(form)
-                zhuyin = _resolve_zhuyin(display_pinyin)
-
-                entry = EnrichedWordEntry(
-                    simplified=simplified,
-                    traditional=str(traditional),
-                    pinyin=display_pinyin,
-                    zhuyin=zhuyin,
-                    definition_html=rendered_definition_html,
-                    audio_filename_female=config.audio_filenames(simplified)[0],
-                    audio_filename_male=config.audio_filenames(simplified)[1],
-                )
-
-                group_entries[extra_group_tag].append(entry)
-
-    for entries in group_entries.values():
-        entries.sort(key=lambda entry: entry.simplified)
+    entries.sort(key=lambda entry: entry.simplified)
 
     selection_report = {
         **selection.report(),
-        "matched_additional_simplified": sorted(matched_additional_simplified),
-        "unmatched_additional_simplified": sorted(
-            selection.additional_simplified - matched_additional_simplified
+        "matched_individual_simplified": sorted(matched_individual_simplified),
+        "unmatched_individual_simplified": sorted(
+            selection.individual_simplified - matched_individual_simplified
         ),
         "meaning_html": {
             "rendered_from_data": rendered_meaning_html_used,
         },
     }
 
-    return group_entries, database, selection_report
+    return entries, database, selection_report
 
 
 def _prepare_audio_dir() -> list[str]:
@@ -677,15 +594,16 @@ def build_package(
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
 ) -> dict[str, Any]:
     config = common.load_deck_config(deck_config_path)
-    selection = load_deck_selection(deck_config_path, config)
-    group_entries, database, selection_report = load_enriched_entries(enriched_db, selection, config)
-    all_entries = [entry for entries in group_entries.values() for entry in entries]
+    selection = load_deck_selection(deck_config_path)
+    entries, database, selection_report = load_enriched_entries(enriched_db, selection, config)
 
     static_media = config.static_media()
-    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_audio(all_entries, config)
+    generated_audio, failed_audio_generation, removed_zero_length_audio = generate_audio(entries, config)
+
     models = common.create_models(config)
-    decks = build_decks(config, models, group_entries)
-    media_files, missing_audio = collect_media(all_entries, static_media)
+    decks = build_decks(config, models, entries)
+
+    media_files, missing_audio = collect_media(entries, static_media)
 
     package = genanki.Package(decks, media_files=media_files)
     write_package(
@@ -696,25 +614,18 @@ def build_package(
         zip_generated_datetime=zip_generated_datetime,
     )
 
-    group_counts = {group.tag_pattern: len(group_entries.get(group.tag_pattern, [])) for group in config.groups}
-
+    total_cards = sum(len(d.notes) for d in decks)
     report = {
         "output": str(output_apkg),
         "report": str(report_path),
         "enriched_db": str(enriched_db),
         "deck_config": selection_report,
         "source_schema": database.get("schema"),
-        "deck_root": config.deck_name,
+        "deck_root": common.DECK_ROOT,
         "card_types": list(config.card_types),
         "dedupe_key": database.get("enrichment", {}).get("dedupe_key"),
-        "hsk_words_after_dedupe": sum(
-            len(group_entries.get(g.tag_pattern, []))
-            for g in config.groups
-            if g.tag_pattern.startswith("hsk:")
-        ),
-        "extra_words": len(group_entries.get("extra", [])),
-        "total_words": len(all_entries),
-        "total_cards": len(all_entries) * len(config.card_types),
+        "total_words": len(entries),
+        "total_cards": total_cards,
         "decks": len(decks),
         "audio_files_packaged": len(media_files) - len(static_media),
         "audio_engine": "kokoro",
@@ -734,11 +645,6 @@ def build_package(
         "skipped_extra_duplicate_occurrences": len(database.get("hanzi", {}).get("skipped_extra_duplicates", [])),
         "skipped_extra_duplicates": database.get("hanzi", {}).get("skipped_extra_duplicates", []),
         "missing_audio_files": missing_audio,
-        "hsk_counts": {
-            g.tag_pattern.replace("hsk:", ""): count
-            for g, count in ((g, group_counts.get(g.tag_pattern, 0)) for g in config.groups)
-            if g.tag_pattern.startswith("hsk:")
-        },
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
@@ -782,8 +688,7 @@ def main() -> int:
 
     output_apkg = args.output
     if output_apkg is None:
-        config = common.load_deck_config(args.config)
-        output_apkg = config.output_apkg_path
+        output_apkg = common.OUTPUT_APKG
 
     report = build_package(
         enriched_db=args.enriched_db,

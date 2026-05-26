@@ -57,12 +57,6 @@ STATIC_MEDIA = [
 DEFAULT_CONFIG_PATH = DECK_INPUTS_DIR / "deck_config.json"
 
 
-@dataclass(frozen=True)
-class GroupDef:
-    tag_pattern: str
-    name: str
-
-
 # Hardcoded voice pools — not configurable per deck to keep builds predictable
 KOKORO_FEMALE_VOICES = ("zf_xiaoxiao", "zf_xiaoni", "zf_xiaobei", "zf_xiaoyi")
 KOKORO_MALE_VOICES = ("zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang")
@@ -87,45 +81,11 @@ class AudioConfig:
 
 @dataclass(frozen=True)
 class DeckConfig:
-    deck_name: str = DECK_ROOT
-    output_filename: str = str(OUTPUT_APKG)
-    hierarchy: str = "{name}::{group}::{card_type}"
-    groups: tuple[GroupDef, ...] = field(default_factory=lambda: (
-        GroupDef(tag_pattern="hsk:1", name="HSK 1"),
-        GroupDef(tag_pattern="hsk:2", name="HSK 2"),
-        GroupDef(tag_pattern="hsk:3", name="HSK 3"),
-        GroupDef(tag_pattern="hsk:4", name="HSK 4"),
-        GroupDef(tag_pattern="hsk:5", name="HSK 5"),
-        GroupDef(tag_pattern="hsk:6", name="HSK 6"),
-        GroupDef(tag_pattern="hsk:7-9", name="HSK 7-9"),
-        GroupDef(tag_pattern="extra", name="Extra"),
-    ))
     card_types: tuple[str, ...] = tuple(CARD_TYPES)
-    templates_dir: str = str(CARD_TEMPLATES_DIR)
     audio: AudioConfig = field(default_factory=AudioConfig)
-    selection_tags: str | tuple[str, ...] = "all"
-    additional_simplified: frozenset[str] = frozenset()
-
-    @property
-    def output_apkg_path(self) -> Path:
-        return Path(self.output_filename)
-
-    @property
-    def templates_dir_path(self) -> Path:
-        return Path(self.templates_dir)
-
-    def group_for_tag(self, tag: str) -> GroupDef | None:
-        for group in self.groups:
-            if group.tag_pattern == tag:
-                return group
-        return None
-
-    def resolve_deck_name(self, group_name: str, card_type: str) -> str:
-        return self.hierarchy.format(
-            name=self.deck_name,
-            group=group_name,
-            card_type=card_type,
-        )
+    mode: str = ""
+    tags: tuple[str, ...] = ()
+    individual_simplified: frozenset[str] = frozenset()
 
     def audio_filenames(self, simplified: str) -> tuple[str, str]:
         return (
@@ -134,27 +94,25 @@ class DeckConfig:
         )
 
     def template_files(self, card_type: str) -> tuple[Path, Path]:
-        tdir = self.templates_dir_path
         mapping = {
-            "Meaning": (tdir / "meaning/front.html", tdir / "meaning/back.html"),
-            "Pinyin": (tdir / "pinyin/front.html", tdir / "pinyin/back.html"),
-            "Write": (tdir / "write/front.html", tdir / "write/back.html"),
+            "Meaning": (CARD_TEMPLATES_DIR / "meaning/front.html", CARD_TEMPLATES_DIR / "meaning/back.html"),
+            "Pinyin": (CARD_TEMPLATES_DIR / "pinyin/front.html", CARD_TEMPLATES_DIR / "pinyin/back.html"),
+            "Write": (CARD_TEMPLATES_DIR / "write/front.html", CARD_TEMPLATES_DIR / "write/back.html"),
         }
         if card_type not in mapping:
             raise ValueError(f"unknown card type: {card_type}")
         return mapping[card_type]
 
     def static_media(self) -> list[str]:
-        tdir = self.templates_dir_path
         return [
-            str(tdir / "fonts/_MaterialIcons-Regular.woff"),
-            str(tdir / "fonts/_MaterialIcons-Regular.woff2"),
-            str(tdir / "files/_pleco.png"),
-            str(tdir / "files/_youdao.png"),
-            str(tdir / "files/_rtega.png"),
-            str(tdir / "files/_tatoeba.png"),
-            str(tdir / "files/_hanzicraft.png"),
-            str(tdir / "files/_characterpop.svg"),
+            str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff"),
+            str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff2"),
+            str(CARD_TEMPLATES_DIR / "files/_pleco.png"),
+            str(CARD_TEMPLATES_DIR / "files/_youdao.png"),
+            str(CARD_TEMPLATES_DIR / "files/_rtega.png"),
+            str(CARD_TEMPLATES_DIR / "files/_tatoeba.png"),
+            str(CARD_TEMPLATES_DIR / "files/_hanzicraft.png"),
+            str(CARD_TEMPLATES_DIR / "files/_characterpop.svg"),
         ]
 
 
@@ -165,51 +123,42 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
         return DeckConfig()
 
     raw = json.loads(path.read_text(encoding="utf-8"))
-    deck_section = raw.get("deck", {})
     selection = raw.get("selection", {})
-    audio_section = raw.get("audio", {})
 
-    groups: list[GroupDef] = []
-    for group_raw in raw.get("groups", []):
-        groups.append(GroupDef(
-            tag_pattern=str(group_raw["tag_pattern"]),
-            name=str(group_raw["name"]),
-        ))
-    if not groups:
-        groups = list(DeckConfig.groups)
-
-    selection_tags: str | tuple[str, ...] = "all"
-    raw_tags = selection.get("tags", "all")
-    if raw_tags != "all":
-        if isinstance(raw_tags, list):
-            selection_tags = tuple(str(t) for t in raw_tags)
-        else:
-            selection_tags = str(raw_tags)
-
-    additional_simplified: frozenset[str] = frozenset()
-    raw_additional = selection.get("additional_simplified", [])
-    if isinstance(raw_additional, list):
-        additional_simplified = frozenset(
-            s for s in (str(item).strip() for item in raw_additional) if s
+    individual_simplified: frozenset[str] = frozenset()
+    raw_individual = selection.get("individual_simplified", [])
+    if isinstance(raw_individual, list):
+        individual_simplified = frozenset(
+            s for s in (str(item).strip() for item in raw_individual) if s
         )
 
+    tags_raw = selection.get("tags", [])
+    if isinstance(tags_raw, str):
+        tags = (tags_raw,)
+    elif isinstance(tags_raw, list):
+        tags = tuple(str(t) for t in tags_raw)
+    else:
+        tags = ()
+
+    audio_section = raw.get("audio", {})
+
     return DeckConfig(
-        deck_name=str(deck_section.get("name", DECK_ROOT)),
-        output_filename=str(deck_section.get("output_filename", str(OUTPUT_APKG))),
-        hierarchy=str(deck_section.get("hierarchy", "{name}::{group}::{card_type}")),
-        groups=tuple(groups),
         card_types=tuple(raw.get("card_types", CARD_TYPES)),
-        templates_dir=str(raw.get("templates_dir", str(CARD_TEMPLATES_DIR))),
         audio=AudioConfig(
             engine=str(audio_section.get("engine", AudioConfig.engine)),
         ),
-        selection_tags=selection_tags,
-        additional_simplified=additional_simplified,
+        mode=str(selection.get("mode", "")),
+        tags=tags,
+        individual_simplified=individual_simplified,
     )
 
 
 class NoteEntry(Protocol):
     def fields(self) -> list[str]:
+        ...
+
+    @property
+    def tags(self) -> tuple[str, ...]:
         ...
 
 
@@ -265,13 +214,12 @@ def read_template(card_type: str, path: str | Path) -> str:
 def create_models(config: DeckConfig | None = None) -> dict[str, genanki.Model]:
     if config is None:
         config = DeckConfig()
-    templates_dir = config.templates_dir_path
-    css = read_text(templates_dir / "styling-hanzi-3.0.css")
+    css = read_text(CARD_TEMPLATES_DIR / "styling-hanzi-3.0.css")
     models: dict[str, genanki.Model] = {}
 
     for card_type in config.card_types:
         front_path, back_path = config.template_files(card_type)
-        model_name = f"Basic - New HSK (2025) - {card_type.lower()}"
+        model_name = f"{DECK_ROOT}::{card_type}"
         models[card_type] = genanki.Model(
             model_id=stable_id(f"model:{model_name}"),
             name=model_name,
@@ -292,7 +240,7 @@ def create_models(config: DeckConfig | None = None) -> dict[str, genanki.Model]:
 def create_deck(deck_name: str, model: genanki.Model, entries: list[NoteEntry]) -> genanki.Deck:
     deck = genanki.Deck(stable_id(f"deck:{deck_name}"), deck_name)
     for entry in entries:
-        deck.add_note(genanki.Note(model=model, fields=entry.fields()))
+        deck.add_note(genanki.Note(model=model, fields=entry.fields(), tags=list(entry.tags)))
     return deck
 
 

@@ -1,56 +1,24 @@
 {
-  "schema": "hanzi-deck-config-v2",
-  "deck": {
-    "name": "汉字 (Hànzì)",
-    "output_filename": "anki-hanzi.apkg",
-    "hierarchy": "{name}::{group}::{card_type}"
-  },
   "selection": {
-    "tags": "all",
-    "additional_simplified": [
+    "mode": "tagged",
+    "tags": [
+      "hsk:1",
+      "hsk:2",
+      "hsk:3",
+      "hsk:4",
+      "hsk:5",
+      "hsk:6",
+      "hsk:7-9"
+    ],
+    "individual_simplified": [
       "英语"
     ]
   },
-  "groups": [
-    {
-      "tag_pattern": "hsk:1",
-      "name": "HSK 1"
-    },
-    {
-      "tag_pattern": "hsk:2",
-      "name": "HSK 2"
-    },
-    {
-      "tag_pattern": "hsk:3",
-      "name": "HSK 3"
-    },
-    {
-      "tag_pattern": "hsk:4",
-      "name": "HSK 4"
-    },
-    {
-      "tag_pattern": "hsk:5",
-      "name": "HSK 5"
-    },
-    {
-      "tag_pattern": "hsk:6",
-      "name": "HSK 6"
-    },
-    {
-      "tag_pattern": "hsk:7-9",
-      "name": "HSK 7-9"
-    },
-    {
-      "tag_pattern": "extra",
-      "name": "Extra"
-    }
-  ],
   "card_types": [
     "Meaning",
     "Pinyin",
     "Write"
   ],
-  "templates_dir": "deck_inputs/card_templates",
   "audio": {
     "engine": "kokoro"
   }
