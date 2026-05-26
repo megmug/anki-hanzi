@@ -808,7 +808,7 @@ def build_package(
         "deterministic_zip": deterministic_zip,
         "zip_datetime": DEFAULT_ZIP_DATETIME if deterministic_zip and zip_generated_datetime is None else None,
         "zip_generated_datetime": zip_generated_datetime,
-        "generated_audio_files": generated_audio,
+        "generated_audio_files_count": len(generated_audio),
         "failed_audio_generation": failed_audio_generation,
         "skipped_audio_generation": skipped_audio_generation,
         "removed_zero_length_audio_files": removed_zero_length_audio,
