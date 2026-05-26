@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -70,7 +72,8 @@ class EnrichedWordEntry:
     def audio_filenames(self) -> tuple[str, str]:
         return (self.audio_filename_female, self.audio_filename_male)
 
-    def fields(self) -> list[str]:
+    def fields(self, card_type: str, build_id: str) -> list[str]:
+        note_id = common.stable_hex_id(f"{card_type}\0{self.simplified}")
         return [
             self.simplified,
             self.traditional,
@@ -79,6 +82,8 @@ class EnrichedWordEntry:
             "",
             self.definition_html,
             self.audio_ref,
+            note_id,
+            build_id,
         ]
 
 
@@ -173,6 +178,7 @@ def build_decks(
     config: DeckConfig,
     models: dict[str, genanki.Model],
     entries: list[EnrichedWordEntry],
+    build_id: str,
 ) -> list[genanki.Deck]:
     decks: list[genanki.Deck] = []
 
@@ -184,12 +190,28 @@ def build_decks(
         decks.append(
             common.create_deck(
                 deck_name=f"{common.DECK_ROOT}::{card_type}",
+                card_type=card_type,
                 model=models[card_type],
                 entries=card_entries,
+                build_id=build_id,
             )
         )
 
     return decks
+
+
+def resolve_build_id() -> str:
+    env_build_id = os.environ.get("ANKI_HANZI_BUILD_ID", "").strip()
+    if env_build_id:
+        return env_build_id
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
 
 
 def build_hanzi_writer_bundle(
@@ -732,6 +754,7 @@ def build_package(
     config = common.load_deck_config(deck_config_path)
     selection = load_deck_selection(deck_config_path)
     entries, database, selection_report = load_enriched_entries(enriched_db, selection, config)
+    build_id = resolve_build_id()
 
     static_media = config.static_media()
     (
@@ -748,7 +771,7 @@ def build_package(
     build_hanzi_writer_bundle(write_entries, hw_bundle_path)
 
     models = common.create_models(config, hw_bundle_path if hw_bundle_path.exists() else None)
-    decks = build_decks(config, models, entries)
+    decks = build_decks(config, models, entries, build_id)
 
     media_files, missing_audio = collect_media(entries, static_media)
 
@@ -769,6 +792,7 @@ def build_package(
         "deck_config": selection_report,
         "source_schema": database.get("schema"),
         "deck_root": common.DECK_ROOT,
+        "build_id": build_id,
         "card_types": list(config.card_types),
         "dedupe_key": database.get("enrichment", {}).get("dedupe_key"),
         "total_words": len(entries),

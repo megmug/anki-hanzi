@@ -35,6 +35,8 @@ FIELDS = [
     {"name": "PoS"},
     {"name": "Meaning"},
     {"name": "Audio"},
+    {"name": "NoteID"},
+    {"name": "BuildID"},
 ]
 
 TEMPLATE_FILES = {
@@ -159,7 +161,7 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
 
 
 class NoteEntry(Protocol):
-    def fields(self) -> list[str]:
+    def fields(self, card_type: str, build_id: str) -> list[str]:
         ...
 
     @property
@@ -170,6 +172,10 @@ class NoteEntry(Protocol):
 def stable_id(label: str) -> int:
     digest = hashlib.sha256(label.encode("utf-8")).digest()
     return (int.from_bytes(digest[:4], "big") % (1 << 30)) + (1 << 30)
+
+
+def stable_hex_id(label: str) -> str:
+    return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
 def read_text(path: str | Path) -> str:
@@ -270,10 +276,16 @@ def create_models(config: DeckConfig | None = None, hw_data_bundle: Path | None 
     return models
 
 
-def create_deck(deck_name: str, model: genanki.Model, entries: list[NoteEntry]) -> genanki.Deck:
+def create_deck(
+    deck_name: str,
+    card_type: str,
+    model: genanki.Model,
+    entries: list[NoteEntry],
+    build_id: str,
+) -> genanki.Deck:
     deck = genanki.Deck(stable_id(f"deck:{deck_name}"), deck_name)
     for entry in entries:
-        deck.add_note(genanki.Note(model=model, fields=entry.fields(), tags=list(entry.tags)))
+        deck.add_note(genanki.Note(model=model, fields=entry.fields(card_type, build_id), tags=list(entry.tags)))
     return deck
 
 

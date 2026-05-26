@@ -2,6 +2,7 @@
 , enableCuda ? false
 , cudaTorchVersion ? "2.9.1"
 , cudaTorchIndexUrl ? "https://download.pytorch.org/whl/cu128"
+, buildId ? null
 , pkgs ? import ( builtins.fetchGit {
     url = "https://github.com/nixos/nixpkgs/";
     ref = "nixos-25.11";
@@ -13,6 +14,16 @@
 
 let
   enableCudaPip = enableCuda && pkgs.stdenv.isLinux;
+  gitHeadPath = ./.git/HEAD;
+  gitHead = if builtins.pathExists gitHeadPath then pkgs.lib.trim (builtins.readFile gitHeadPath) else "";
+  gitHeadRef = if pkgs.lib.hasPrefix "ref: " gitHead then pkgs.lib.removePrefix "ref: " gitHead else "";
+  gitHeadRefPath = ./.git + "/${gitHeadRef}";
+  gitCommit =
+    if buildId != null then buildId
+    else if gitHeadRef != "" && builtins.pathExists gitHeadRefPath then pkgs.lib.trim (builtins.readFile gitHeadRefPath)
+    else if gitHead != "" && !(pkgs.lib.hasPrefix "ref: " gitHead) then gitHead
+    else "unknown";
+  resolvedBuildId = if gitCommit == "unknown" then "unknown" else builtins.substring 0 7 gitCommit;
 
   colorize-pinyin = pkgs.python312Packages.buildPythonPackage rec {
     pname = "colorize-pinyin";
@@ -151,6 +162,7 @@ let
       # huggingface_hub/httpx needs CA certs for HTTPS downloads
       export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
       export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+      export ANKI_HANZI_BUILD_ID="${resolvedBuildId}"
       echo "=== pip CUDA PyTorch: ${if enableCudaPip then "enabled" else "disabled"} ==="
 
       # Isolate pip-installed packages so they don't clash with Nix python
