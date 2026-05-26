@@ -73,7 +73,7 @@ class EnrichedWordEntry:
         return (self.audio_filename_female, self.audio_filename_male)
 
     def fields(self, card_type: str, build_id: str) -> list[str]:
-        note_id = common.stable_hex_id(f"{card_type}\0{self.simplified}")
+        note_id = common.stable_note_id(card_type, self.simplified, self.pinyin)
         return [
             self.simplified,
             self.traditional,

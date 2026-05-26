@@ -178,6 +178,16 @@ def stable_hex_id(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
+def normalized_note_pinyin(value: str) -> str:
+    return " ".join(str(value or "").split()).casefold()
+
+
+def stable_note_id(card_type: str, simplified: str, pinyin: str) -> str:
+    return stable_hex_id(
+        f"{card_type}\0{str(simplified or '').strip()}\0{normalized_note_pinyin(pinyin)}"
+    )
+
+
 def read_text(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
