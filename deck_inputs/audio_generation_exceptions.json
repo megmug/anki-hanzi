@@ -1,0 +1,13 @@
+{
+  "schema": "hanzi-audio-generation-exceptions-v1",
+  "words": [
+    {
+      "simplified": "兙",
+      "reason": "Kokoro Chinese G2P cannot detect pinyin final"
+    },
+    {
+      "simplified": "兡",
+      "reason": "Kokoro Chinese G2P cannot detect pinyin final"
+    }
+  ]
+}
