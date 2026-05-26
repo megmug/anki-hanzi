@@ -2,6 +2,11 @@
 # yarn lockfile v1
 
 
+hanzi-writer-data@2.0.1:
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/hanzi-writer-data/-/hanzi-writer-data-2.0.1.tgz#09ce12eb1c47d86aeb33313e622f17ba5cbac1ad"
+  integrity sha512-nbQwM+MaryGoq7pBMIZLCd3lFq03nXuJuwku1+6UbjL58uU+9OULVcMkoNvNuJSoIV7f1bbPRfD4D/LQa5S7qg==
+
 hanzi-writer@3.7.3:
   version "3.7.3"
   resolved "https://registry.npmjs.org/hanzi-writer/-/hanzi-writer-3.7.3.tgz"

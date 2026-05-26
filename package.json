@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "dependencies": {
-    "hanzi-writer": "3.7.3"
+    "hanzi-writer": "3.7.3",
+    "hanzi-writer-data": "2.0.1"
   },
   "engines": {
     "node": ">=18.0"
