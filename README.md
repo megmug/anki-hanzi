@@ -1,12 +1,10 @@
 # anki-hanzi Custom Deck
 
-This repository is a personal project originally forked from
-[krmanik/Anki-xiehanzi](https://github.com/krmanik/Anki-xiehanzi). The original
-project provides the upstream Anki-xiehanzi deck, website, and browser-based
-deck generator. This fork keeps the parts needed for my own Mandarin study deck
-and has diverged intentionally.
+This repository is a personal project originally forked from [krmanik/Anki-xiehanzi](https://github.com/krmanik/Anki-xiehanzi).
+The original project provides the upstream Anki-xiehanzi deck, website, and browser-based deck generator.
+This fork keeps the parts needed for my own Mandarin study deck and has diverged intentionally.
 
-The current build produces one custom APKG:
+The current build produces one APKG:
 
 - `anki-hanzi.apkg`
 
@@ -14,20 +12,12 @@ The current build produces one custom APKG:
 
 Compared with upstream, this fork currently:
 
-- builds only the custom New HSK / HSK 3.0 deck, not the full upstream set of
-  deck variants;
+- builds a custom deck including all HSK 3.0 2026 words, configurable to include any word from the dictionary CC-CEDICT;
 - removes sentence cards and the separate audio-only card type;
 - keeps Meaning, Pinyin, and Write cards;
-- defaults the templates to Simplified Chinese and Pinyin, with Traditional
-  characters and Zhuyin disabled;
+- defaults the templates to Simplified Chinese and Pinyin, with Traditional characters and Zhuyin disabled;
 - adds a HanziWriter-based scoring panel for Write cards;
 - builds from a Python/Nix pipeline instead of the old website generator;
-- uses a compact CC-CEDICT-derived JSON database enriched with hanzi HSK
-  study targets;
-- checks the generated APKG against a pinned last-known-good hash by default.
-
-This is not intended to remain a cleanly syncable fork of upstream. The upstream
-repository remains useful as historical reference and source attribution.
 
 ## Build
 
@@ -40,25 +30,18 @@ git submodule update --init --recursive
 Then build the APKG with Nix:
 
 ```sh
-nix-build
+nix-build --no-sandbox
 ```
 
 On a Linux machine with an NVIDIA GPU, install CUDA-capable PyTorch into the
 build's isolated pip prefix:
 
 ```sh
-nix-build --arg enableCuda true
+nix-build --arg enableCuda true --no-sandbox
 ```
-
-The deck generator still falls back to CPU when CUDA is unavailable, so the
-default `nix-build` remains suitable for GitHub Actions and macOS.
 
 `nix-build` creates the default `result` symlink. The APKG and build reports are
 written there.
-
-The default build is invariant: it verifies that the APKG hash still matches the
-pin in `deck_inputs/apkg_build_invariant.json`. If an intentional deck-output
-change is made, update that pin deliberately after reviewing the diff.
 
 ## Repository Layout
 
@@ -66,14 +49,9 @@ change is made, update that pin deliberately after reviewing the diff.
   templates, deck config, the pinned CC-CEDICT snapshot, extra words, audio
   inputs, and the HSK/xiehanzi word-list submodule.
 - `scripts/`: the Python source-of-truth build pipeline.
-- `_migrator-repo/`: Anki Debug Console migration tooling used to migrate an
-  existing local collection to the generated deck while preserving scheduling
-  state.
 - `.github/workflows/`: CI build workflow that runs the Nix build and uploads
   artifacts.
-
-Generated JSON databases, reports, and APKGs should stay in build output
-directories such as `result`, not in the repository root.
+- `result/`: where the build artifacts land.
 
 ## Updating Source Data
 
