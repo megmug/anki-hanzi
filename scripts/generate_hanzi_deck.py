@@ -58,6 +58,8 @@ class EnrichedWordEntry:
 
     @property
     def audio_ref(self) -> str:
+        if not self.audio_filename_female and not self.audio_filename_male:
+            return ""
         return (
             f"[sound:{self.audio_filename_female}]"
             f"[sound:{self.audio_filename_male}]"
@@ -144,6 +146,28 @@ def load_deck_selection(config_path: Path | None) -> DeckSelection:
     )
 
 
+def _is_hanzi_char(char: str) -> bool:
+    code = ord(char)
+    return (
+        (0x4E00 <= code <= 0x9FFF)
+        or (0x3400 <= code <= 0x4DBF)
+        or (0x20000 <= code <= 0x2EBEF)
+    )
+
+
+def _has_hanzi_writer_data(char: str) -> bool:
+    if not _is_hanzi_char(char):
+        return False
+    data_file = common.HANZI_WRITER_DATA_DIR / f"{char}.json"
+    return data_file.exists()
+
+
+def _is_writable_hanzi(text: str) -> bool:
+    if not text:
+        return False
+    return all(_has_hanzi_writer_data(c) for c in text)
+
+
 def build_decks(
     config: DeckConfig,
     models: dict[str, genanki.Model],
@@ -152,15 +176,44 @@ def build_decks(
     decks: list[genanki.Deck] = []
 
     for card_type in config.card_types:
+        if card_type == "Write":
+            card_entries = [e for e in entries if _is_writable_hanzi(e.simplified)]
+        else:
+            card_entries = entries
         decks.append(
             common.create_deck(
                 deck_name=f"{common.DECK_ROOT}::{card_type}",
                 model=models[card_type],
-                entries=entries,
+                entries=card_entries,
             )
         )
 
     return decks
+
+
+def build_hanzi_writer_bundle(
+    write_entries: list[EnrichedWordEntry],
+    output_path: Path,
+) -> str:
+    """Build a single JS file with all hanzi-writer data needed by the Write deck.
+
+    Returns the path to the generated file.
+    """
+    unique_chars: set[str] = set()
+    for entry in write_entries:
+        for char in entry.simplified:
+            if _has_hanzi_writer_data(char):
+                unique_chars.add(char)
+
+    data: dict[str, Any] = {}
+    for char in unique_chars:
+        data_file = common.HANZI_WRITER_DATA_DIR / f"{char}.json"
+        if data_file.exists():
+            data[char] = json.loads(data_file.read_text(encoding="utf-8"))
+
+    bundle_js = "window.hanziWriterData = " + json.dumps(data, ensure_ascii=False) + ";\n"
+    output_path.write_text(bundle_js, encoding="utf-8")
+    return str(output_path)
 
 
 def _resolve_display_pinyin(form: dict[str, Any]) -> str:
@@ -231,14 +284,15 @@ def load_enriched_entries(
 
         rendered_meaning_html_used += 1
 
+        include_audio = config.audio.engine.lower().replace("-", "_") != "off"
         entry = EnrichedWordEntry(
             simplified=simplified,
             traditional=str(traditional),
             pinyin=display_pinyin,
             zhuyin=zhuyin,
             definition_html=rendered_definition_html,
-            audio_filename_female=config.audio_filenames(simplified)[0],
-            audio_filename_male=config.audio_filenames(simplified)[1],
+            audio_filename_female=config.audio_filenames(simplified)[0] if include_audio else "",
+            audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
             tags=tuple(sorted(all_tags)),
         )
         entries.append(entry)
@@ -491,6 +545,8 @@ def collect_media(entries: list[EnrichedWordEntry], static_media: list[str]) -> 
 
     for entry in entries:
         for filename in entry.audio_filenames:
+            if not filename:
+                continue
             path = common.EXTRA_AUDIO_DIR / filename
             if path.exists():
                 if filename not in seen_media_names:
@@ -600,7 +656,13 @@ def build_package(
     static_media = config.static_media()
     generated_audio, failed_audio_generation, removed_zero_length_audio = generate_audio(entries, config)
 
-    models = common.create_models(config)
+    # Build hanzi-writer JS bundle for offline Write deck usage
+    write_entries = [e for e in entries if _is_writable_hanzi(e.simplified)]
+    hw_bundle_path = Path(common.EXTRA_AUDIO_DIR) / "hanzi-writer-data.js"
+    hw_bundle_path.parent.mkdir(parents=True, exist_ok=True)
+    build_hanzi_writer_bundle(write_entries, hw_bundle_path)
+
+    models = common.create_models(config, hw_bundle_path if hw_bundle_path.exists() else None)
     decks = build_decks(config, models, entries)
 
     media_files, missing_audio = collect_media(entries, static_media)
@@ -628,7 +690,7 @@ def build_package(
         "total_cards": total_cards,
         "decks": len(decks),
         "audio_files_packaged": len(media_files) - len(static_media),
-        "audio_engine": "kokoro",
+        "audio_engine": config.audio.engine,
         "audio_female_voices": list(common.KOKORO_FEMALE_VOICES if config.audio.engine == "kokoro" else common.EDGE_TTS_FEMALE_VOICES),
         "audio_male_voices": list(common.KOKORO_MALE_VOICES if config.audio.engine == "kokoro" else common.EDGE_TTS_MALE_VOICES),
         "hanzi_writer_version": common.read_hanzi_writer_package_version(),

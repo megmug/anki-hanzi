@@ -21,6 +21,7 @@ AUDIO_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Audio"
 EXTRA_AUDIO_DIR = DECK_INPUTS_DIR / "extra_audio"
 HANZI_WRITER_PACKAGE_JSON = Path("node_modules/hanzi-writer/package.json")
 HANZI_WRITER_BUNDLE = Path("node_modules/hanzi-writer/dist/hanzi-writer.min.js")
+HANZI_WRITER_DATA_DIR = Path("node_modules/hanzi-writer-data")
 VOICE = "zh-CN-XiaoxiaoNeural"
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
@@ -140,13 +141,17 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
     else:
         tags = ()
 
-    audio_section = raw.get("audio", {})
+    audio_raw = raw.get("audio")
+    if audio_raw is None:
+        audio = AudioConfig(engine="off")
+    else:
+        audio = AudioConfig(
+            engine=str(audio_raw.get("engine", AudioConfig.engine)),
+        )
 
     return DeckConfig(
         card_types=tuple(raw.get("card_types", CARD_TYPES)),
-        audio=AudioConfig(
-            engine=str(audio_section.get("engine", AudioConfig.engine)),
-        ),
+        audio=audio,
         mode=str(selection.get("mode", "")),
         tags=tags,
         individual_simplified=individual_simplified,
@@ -204,14 +209,42 @@ def inject_hanzi_writer_bundle(template: str) -> str:
     return template[:script_start] + indented_bundle + template[script_end:]
 
 
-def read_template(card_type: str, path: str | Path) -> str:
+def inject_hanzi_data_bundle(template: str, bundle_path: Path) -> str:
+    """Inject hanzi-writer-data JS bundle directly into the template as inline script."""
+    if not bundle_path.exists():
+        return template
+    
+    bundle = bundle_path.read_text(encoding="utf-8")
+    # Find a good insertion point - after the hanzi-writer bundle script
+    marker = "</script>"
+    # Find the 3rd </script> (after Persistence, hanzi-writer bundle, and colorize-pinyin)
+    pos = 0
+    for _ in range(3):
+        pos = template.find(marker, pos)
+        if pos < 0:
+            break
+        pos += len(marker)
+    
+    if pos < 0:
+        # Fallback: insert before </body> or at the end
+        pos = template.find("</body>")
+        if pos < 0:
+            pos = len(template)
+    
+    inline_script = f"\n<script>\n{bundle}\n</script>\n"
+    return template[:pos] + inline_script + template[pos:]
+
+
+def read_template(card_type: str, path: str | Path, hw_data_bundle: Path | None = None) -> str:
     template = read_text(path)
     if card_type == "Write":
-        return inject_hanzi_writer_bundle(template)
+        template = inject_hanzi_writer_bundle(template)
+        if hw_data_bundle:
+            template = inject_hanzi_data_bundle(template, hw_data_bundle)
     return template
 
 
-def create_models(config: DeckConfig | None = None) -> dict[str, genanki.Model]:
+def create_models(config: DeckConfig | None = None, hw_data_bundle: Path | None = None) -> dict[str, genanki.Model]:
     if config is None:
         config = DeckConfig()
     css = read_text(CARD_TEMPLATES_DIR / "styling-hanzi-3.0.css")
@@ -227,7 +260,7 @@ def create_models(config: DeckConfig | None = None) -> dict[str, genanki.Model]:
             templates=[
                 {
                     "name": f"Card 1 - {card_type}",
-                    "qfmt": read_template(card_type, front_path),
+                    "qfmt": read_template(card_type, front_path, hw_data_bundle),
                     "afmt": read_text(back_path),
                 }
             ],
