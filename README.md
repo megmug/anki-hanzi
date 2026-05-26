@@ -43,6 +43,16 @@ Then build the APKG with Nix:
 nix-build
 ```
 
+On a Linux machine with an NVIDIA GPU, install CUDA-capable PyTorch into the
+build's isolated pip prefix:
+
+```sh
+nix-build --arg enableCuda true
+```
+
+The deck generator still falls back to CPU when CUDA is unavailable, so the
+default `nix-build` remains suitable for GitHub Actions and macOS.
+
 `nix-build` creates the default `result` symlink. The APKG and build reports are
 written there.
 

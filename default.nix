@@ -1,11 +1,18 @@
-{ pkgs ? import ( builtins.fetchGit {
+{ system ? builtins.currentSystem
+, enableCuda ? false
+, cudaTorchVersion ? "2.9.1"
+, cudaTorchIndexUrl ? "https://download.pytorch.org/whl/cu128"
+, pkgs ? import ( builtins.fetchGit {
     url = "https://github.com/nixos/nixpkgs/";
     ref = "nixos-25.11";
     rev = "d7a713c0b7e47c908258e71cba7a2d77cc8d71d5";
-} ) {}
+} ) {
+  inherit system;
+}
 }:
 
 let
+  enableCudaPip = enableCuda && pkgs.stdenv.isLinux;
 
   colorize-pinyin = pkgs.python312Packages.buildPythonPackage rec {
     pname = "colorize-pinyin";
@@ -144,6 +151,7 @@ let
       # huggingface_hub/httpx needs CA certs for HTTPS downloads
       export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
       export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+      echo "=== pip CUDA PyTorch: ${if enableCudaPip then "enabled" else "disabled"} ==="
 
       # Isolate pip-installed packages so they don't clash with Nix python
       PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
@@ -152,7 +160,48 @@ let
       export PIP_PREFIX="$PIP_PREFIX"
       export PYTHONPATH="$SITE_PACKAGES:$PYTHONPATH"
       export PATH="$PIP_PREFIX/bin:$PATH"
+      export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
       mkdir -p "$PIP_PREFIX"
+
+      ${pkgs.lib.optionalString enableCudaPip ''
+      CUDA_DRIVER_LIB_DIR="$TMPDIR/nvidia-driver-libs"
+      mkdir -p "$CUDA_DRIVER_LIB_DIR"
+      for driver_lib in \
+        /run/opengl-driver/lib \
+        /usr/lib/x86_64-linux-gnu \
+        /usr/lib64 \
+        /usr/lib/wsl/lib; do
+        if [ -d "$driver_lib" ]; then
+          while IFS= read -r lib; do
+            resolved="$(readlink -f "$lib" || true)"
+            if [ -n "$resolved" ]; then
+              ln -sf "$resolved" "$CUDA_DRIVER_LIB_DIR/$(basename "$lib")"
+            fi
+          done < <(find "$driver_lib" -maxdepth 1 \( -type f -o -type l \) \( \
+            -name 'libcuda.so*' -o \
+            -name 'libnvidia-*.so*' \
+          \))
+        fi
+      done
+
+      echo "=== Installing CUDA-enabled PyTorch wheel into pip prefix ==="
+      if ! pip install --prefix "$PIP_PREFIX" --no-cache-dir \
+        --ignore-installed --force-reinstall \
+        --index-url "${cudaTorchIndexUrl}" \
+        "torch==${cudaTorchVersion}"; then
+        echo "WARNING: CUDA PyTorch wheel installation failed; falling back to Nix CPU PyTorch"
+        rm -rf "$PIP_PREFIX"
+        mkdir -p "$PIP_PREFIX"
+      else
+        export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:$CUDA_DRIVER_LIB_DIR''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        if ! python -c "import ctypes.util, torch; print('=== PyTorch', torch.__version__, 'from', torch.__file__, 'CUDA', torch.version.cuda, 'available', torch.cuda.is_available(), 'devices', torch.cuda.device_count(), 'libcuda', ctypes.util.find_library('cuda'), '===')"; then
+          echo "WARNING: CUDA PyTorch import/probe failed; falling back to Nix CPU PyTorch"
+          rm -rf "$PIP_PREFIX"
+          mkdir -p "$PIP_PREFIX"
+          export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib"
+        fi
+      fi
+      ''}
 
       # Install Kokoro + Chinese G2P deps if not present
       if ! python -c "import kokoro" 2>/dev/null; then

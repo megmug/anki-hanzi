@@ -354,6 +354,38 @@ def _prepare_audio_dir() -> list[str]:
     return removed
 
 
+def _torch_cuda_available() -> bool:
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+def _resolve_kokoro_device() -> str:
+    return "cuda" if _torch_cuda_available() else "cpu"
+
+
+def _create_kokoro_pipeline(KPipeline: type, device: str) -> Any:
+    import inspect
+
+    kwargs: dict[str, Any] = {"lang_code": "z"}
+    try:
+        parameters = inspect.signature(KPipeline).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    supports_device = "device" in parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+    if supports_device:
+        kwargs["device"] = device
+    elif device != "cpu":
+        print("  Kokoro KPipeline does not expose device=; using package default", flush=True)
+    return KPipeline(**kwargs)
+
+
 def _generate_audio_kokoro(
     entries: list[EnrichedWordEntry],
     config: common.DeckConfig,
@@ -363,11 +395,39 @@ def _generate_audio_kokoro(
     import soundfile as sf
     from kokoro import KPipeline
 
+    device = _resolve_kokoro_device()
     try:
-        pipeline = KPipeline(lang_code="z")
+        pipeline = _create_kokoro_pipeline(KPipeline, device)
     except Exception:
-        import traceback
-        return [], [{"error": f"Failed to load Kokoro pipeline:\n{traceback.format_exc()}"}], removed
+        if device != "cpu":
+            print("  Kokoro audio device: failed to initialize cuda; falling back to cpu", flush=True)
+            device = "cpu"
+            try:
+                pipeline = _create_kokoro_pipeline(KPipeline, device)
+            except Exception:
+                import traceback
+                return [], [{"error": f"Failed to load Kokoro pipeline:\n{traceback.format_exc()}"}], removed
+        else:
+            import traceback
+            return [], [{"error": f"Failed to load Kokoro pipeline:\n{traceback.format_exc()}"}], removed
+
+    print(f"  Kokoro audio device: {device}", flush=True)
+
+    fallback_to_cpu = device != "cpu"
+
+    def synthesize(word: str, voice: str) -> list[Any]:
+        nonlocal device, fallback_to_cpu, pipeline
+        try:
+            return list(pipeline(word, voice=voice, speed=1.0))
+        except Exception as exc:
+            if not fallback_to_cpu:
+                raise
+            print(f"  Kokoro audio device: cuda generation failed; falling back to cpu ({exc})", flush=True)
+            fallback_to_cpu = False
+            device = "cpu"
+            pipeline = _create_kokoro_pipeline(KPipeline, device)
+            return list(pipeline(word, voice=voice, speed=1.0))
+
 
     generated: list[str] = []
     failed: list[dict[str, str]] = []
@@ -391,7 +451,7 @@ def _generate_audio_kokoro(
         ]:
             output_path = common.EXTRA_AUDIO_DIR / filename
             try:
-                results = list(pipeline(word, voice=voice, speed=1.0))
+                results = synthesize(word, voice)
                 segments = [r.audio for r in results if r.audio is not None]
                 if not segments:
                     failed.append({
