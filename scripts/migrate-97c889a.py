@@ -1,7 +1,7 @@
 """
 Stateful hanzi migration script for Anki's Debug Console.
 
-Generated for: migrate from commit 09c18be → current
+Generated for: migrate from commit 97c889a → current
 
 WARNING:
 - This script is destructive. Run it only after a full `.colpkg` backup.
