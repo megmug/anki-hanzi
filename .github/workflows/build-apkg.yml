@@ -34,14 +34,22 @@ jobs:
       - name: Build APKG package
         run: nix-build --out-link result --argstr buildId "${GITHUB_SHA}"
 
+      - name: Define release metadata
+        id: release_meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILD_STAMP="$(date -u +%Y%m%d-%H%M%S)"
+          RELEASE_NAME="anki-hanzi-${BUILD_STAMP}-${SHORT_SHA}"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
+
       - name: Collect build artifacts
+        env:
+          RELEASE_NAME: ${{ steps.release_meta.outputs.release_name }}
+          SHORT_SHA: ${{ steps.release_meta.outputs.short_sha }}
         run: |
           mkdir -p ci-artifacts
-          SHORT_SHA="${GITHUB_SHA::7}"
-          RELEASE_NAME="anki-hanzi-${SHORT_SHA}"
           cp -L result/anki-hanzi-${SHORT_SHA}.apkg ci-artifacts/
-          cp -L result/*.json ci-artifacts/
-          cp deck_inputs/deck_config.json ci-artifacts/
           find -H result -maxdepth 1 -type f -name '*.py' -exec cp -L {} ci-artifacts/ \;
           {
             echo "# anki-hanzi APKG build"
@@ -52,24 +60,22 @@ jobs:
             echo
             echo "## Included artifacts"
             echo
-            echo "- \`${RELEASE_NAME}.apkg\`"
-            echo "- \`deck_config.json\`"
-            echo "- \`generate_hanzi_report.json\`"
-            echo "- \`hanzi_enrichment_report.json\`"
-            echo "- \`cc_cedict_hanzi_enriched.json\`"
+            echo "- \`anki-hanzi-${SHORT_SHA}.apkg\`"
             echo "- migration scripts from the Nix result, if present"
             echo
             echo "## Migration script naming"
             echo
-            echo "Release and APKG names use the target build hash. Migration scripts keep"
-            echo "their checked-in filenames. A file named \`migrate-<old-hash>.py\` means:"
-            echo "migrate from that old build hash to this release's target build."
+            echo "Release names use a UTC timestamp plus the target build hash."
+            echo "APKG filenames keep the plain target build hash."
+            echo "Migration scripts keep their checked-in filenames. A file named"
+            echo "\`migrate-<old-hash>.py\` means: migrate from that old build hash"
+            echo "to this release's target build."
           } > ci-artifacts/README.md
 
       - name: Upload APKG artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: hanzi-apkg-${{ github.sha }}
+          name: ${{ steps.release_meta.outputs.release_name }}
           path: ci-artifacts/
           if-no-files-found: error
           retention-days: 14
@@ -78,9 +84,9 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NAME: ${{ steps.release_meta.outputs.release_name }}
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          TAG="anki-hanzi-${SHORT_SHA}"
+          TAG="$RELEASE_NAME"
           TITLE="$TAG"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
