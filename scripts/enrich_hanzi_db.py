@@ -8,9 +8,9 @@ This is a separate pipeline stage:
     CC-CEDICT master JSON + hanzi TSV files -> enriched JSON -> deck generator
 
 The enriched output keeps the CC-CEDICT words as the organizing structure and
-adds hanzi study targets under matching `forms[].hanzi.study_targets`.
-Those entries intentionally mirror the data the Python deck generator currently
-needs, while keeping ingestion independent from APKG generation.
+tags matching forms with the HSK levels that include them. The deck generator
+selects concrete forms by those tags, keeping ingestion independent from APKG
+generation.
 
 Run from the repository root inside the Nix shell:
 
@@ -355,18 +355,6 @@ def prefer_first(values: list[str], value: str) -> None:
     values.insert(0, value)
 
 
-def study_target_payload(entry: dict[str, Any]) -> dict[str, Any]:
-    payload = dict(entry)
-    payload.pop("simplified", None)
-    payload.pop("traditional", None)
-    payload.pop("meaning_html", None)
-    payload.pop("audio_filename", None)
-    payload.pop("frequency", None)
-    payload.pop("source", None)
-    payload.pop("tags", None)
-    return payload
-
-
 def find_or_create_hanzi_form(
     word: dict[str, Any],
     entry: dict[str, Any],
@@ -527,7 +515,7 @@ def enrich_database(
         },
         "words": words,
         "hanzi": {
-            "study_targets_location": "words[].forms[].hanzi.study_targets",
+            "study_targets_location": "words[].forms[].tags",
             "dropped_duplicates": dropped_duplicates,
             "skipped_extra_duplicates": skipped_extra_duplicates,
         },

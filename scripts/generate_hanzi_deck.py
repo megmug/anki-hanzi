@@ -8,8 +8,8 @@ The generator reads word/card data from
 build helpers in `scripts/deck_build_common.py` for templates, media, and stable
 Anki ids.
 
-`deck_inputs/deck_config.json` controls which enriched hanzi study targets
-are emitted as notes. This first config layer selects target words only; card
+`deck_inputs/deck_config.json` controls which tagged hanzi forms are emitted
+as notes. This first config layer selects target forms only; card
 types are still the fixed Meaning, Pinyin, and Write set.
 
 Run from the repository root inside the Nix shell:
@@ -259,66 +259,61 @@ def load_enriched_entries(
     entries: list[EnrichedWordEntry] = []
     matched_individual_simplified: set[str] = set()
     rendered_meaning_html_used = 0
-    seen_simplified: set[str] = set()
+    seen_entry_keys: set[tuple[str, str]] = set()
+    selection_tags = set(selection.tags)
 
     for word in database.get("words", []):
         simplified = normalize_simplified(word["simplified"])
 
-        # Collect all tags from word-level and all forms
-        all_tags: set[str] = set(word.get("tags", []))
-        for form in word.get("forms", []):
-            all_tags.update(form.get("tags", []))
-
         is_individual = simplified in selection.individual_simplified
         mode = selection.mode
 
-        if mode == "all":
-            # Include every word in the database
-            pass
-        elif mode == "tagged":
-            if not (all_tags & set(selection.tags)) and not is_individual:
-                continue
-        else:
-            if not is_individual:
-                continue
-
-        if is_individual:
-            matched_individual_simplified.add(simplified)
-
-        # Deduplicate: only one entry per simplified character
-        if simplified in seen_simplified:
-            continue
-        seen_simplified.add(simplified)
-
         rendered_definition_html = render_meaning_html(word)
 
-        # Use the first form for pinyin/traditional, or fall back to word-level data
         forms = word.get("forms", [])
-        if forms:
-            form = forms[0]
+        if not forms:
+            forms = [{}]
+
+        word_entry_count = 0
+        for form in forms:
+            form_tags = set(form.get("tags", []))
+            fallback_tags = set(word.get("tags", []))
+            effective_tags = form_tags or fallback_tags
+
+            if mode == "tagged" and not (effective_tags & selection_tags) and not is_individual:
+                continue
+            if mode not in {"all", "tagged"} and not is_individual:
+                continue
+
+            display_pinyin = _resolve_display_pinyin(form)
+            entry_key = (simplified, common.normalized_note_pinyin(display_pinyin))
+            if not entry_key[1] or entry_key in seen_entry_keys:
+                continue
+            seen_entry_keys.add(entry_key)
+
+            if is_individual:
+                matched_individual_simplified.add(simplified)
+
             traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
             traditional = traditional_variants[0] if traditional_variants else simplified
-            display_pinyin = _resolve_display_pinyin(form)
-        else:
-            traditional = simplified
-            display_pinyin = ""
+            zhuyin = _resolve_zhuyin(display_pinyin)
 
-        zhuyin = _resolve_zhuyin(display_pinyin)
+            include_audio = config.audio.engine.lower().replace("-", "_") != "off"
+            entry = EnrichedWordEntry(
+                simplified=simplified,
+                traditional=str(traditional),
+                pinyin=display_pinyin,
+                zhuyin=zhuyin,
+                definition_html=rendered_definition_html,
+                audio_filename_female=config.audio_filenames(simplified)[0] if include_audio else "",
+                audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
+                tags=tuple(sorted(effective_tags | {"source:xiehanzi"})),
+            )
+            entries.append(entry)
+            word_entry_count += 1
 
-        rendered_meaning_html_used += 1
-
-        include_audio = config.audio.engine.lower().replace("-", "_") != "off"
-        entry = EnrichedWordEntry(
-            simplified=simplified,
-            traditional=str(traditional),
-            pinyin=display_pinyin,
-            zhuyin=zhuyin,
-            definition_html=rendered_definition_html,
-            audio_filename_female=config.audio_filenames(simplified)[0] if include_audio else "",
-            audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
-            tags=tuple(sorted(all_tags)),
-        )
-        entries.append(entry)
+        if word_entry_count:
+            rendered_meaning_html_used += 1
 
     entries.sort(key=lambda entry: entry.simplified)
 
