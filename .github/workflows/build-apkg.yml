@@ -32,14 +32,14 @@ jobs:
             sandbox = false
 
       - name: Build APKG package
-        run: nix-build --out-link result
+        run: nix-build --out-link result --argstr buildId "${GITHUB_SHA}"
 
       - name: Collect build artifacts
         run: |
           mkdir -p ci-artifacts
           SHORT_SHA="${GITHUB_SHA::7}"
           RELEASE_NAME="anki-hanzi-${SHORT_SHA}"
-          cp -L result/anki-hanzi.apkg "ci-artifacts/${RELEASE_NAME}.apkg"
+          cp -L result/anki-hanzi-${SHORT_SHA}.apkg ci-artifacts/
           cp -L result/*.json ci-artifacts/
           cp deck_inputs/deck_config.json ci-artifacts/
           if compgen -G "migration/*.py" > /dev/null; then

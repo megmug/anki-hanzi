@@ -246,7 +246,7 @@ let
       runHook preInstall
 
       mkdir -p "$out"
-      cp "anki-hanzi.apkg" "$out/"
+      cp "anki-hanzi.apkg" "$out/anki-hanzi-${resolvedBuildId}.apkg"
       cp build_reports/generate_hanzi_report.json "$out/"
       cp master_db_output/cc_cedict_hanzi_enriched.json "$out/"
       cp master_db_output/hanzi_enrichment_report.json "$out/"
