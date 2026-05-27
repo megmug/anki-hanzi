@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -82,10 +83,79 @@ class AudioConfig:
     engine: str = "kokoro"  # "kokoro" or "edge_tts"
 
 
+DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
+    "Meaning": {
+        "front": {
+            "show_pinyin": True,
+            "show_zhuyin": False,
+            "show_meaning": True,
+            "show_simplified": True,
+            "show_traditional": False,
+        },
+        "back": {
+            "show_pinyin": True,
+            "show_zhuyin": False,
+            "show_meaning": True,
+            "show_simplified": True,
+            "show_traditional": False,
+        },
+    },
+    "Pinyin": {
+        "front": {
+            "show_pinyin": True,
+            "show_zhuyin": False,
+            "show_meaning": True,
+            "show_simplified": True,
+            "show_traditional": False,
+        },
+        "back": {
+            "show_pinyin": True,
+            "show_zhuyin": False,
+            "show_meaning": True,
+            "show_simplified": True,
+            "show_traditional": False,
+        },
+    },
+    "Write": {
+        "front": {
+            "practice": "simplified",
+            "show_pinyin": True,
+            "show_meaning": True,
+            "show_simplified": False,
+            "show_traditional": False,
+            "show_grid": True,
+            "show_outline": False,
+            "stroke_tone_color": True,
+            "grid_size": 400,
+            "stroke_width": 64,
+            "hint_after_misses": 0,
+        },
+        "back": {
+            "practice": "simplified",
+            "show_pinyin": True,
+            "show_meaning": True,
+            "show_simplified": True,
+            "show_traditional": False,
+            "show_grid": True,
+            "show_outline": False,
+            "stroke_tone_color": True,
+            "grid_size": 400,
+            "stroke_width": 64,
+            "hint_after_misses": 0,
+        },
+    },
+}
+
+
+def default_card_settings() -> dict[str, dict[str, dict[str, Any]]]:
+    return deepcopy(DEFAULT_CARD_SETTINGS)
+
+
 @dataclass(frozen=True)
 class DeckConfig:
     card_types: tuple[str, ...] = tuple(CARD_TYPES)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    card_settings: dict[str, dict[str, dict[str, Any]]] = field(default_factory=default_card_settings)
     mode: str = ""
     tags: tuple[str, ...] = ()
     individual_simplified: frozenset[str] = frozenset()
@@ -117,6 +187,14 @@ class DeckConfig:
             str(CARD_TEMPLATES_DIR / "files/_hanzicraft.png"),
             str(CARD_TEMPLATES_DIR / "files/_characterpop.svg"),
         ]
+
+    def card_settings_json(self, card_type: str) -> str:
+        return json.dumps(
+            self.card_settings.get(card_type, {}),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
 
 
 def load_deck_config(path: Path | None = None) -> DeckConfig:
@@ -154,10 +232,78 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
     return DeckConfig(
         card_types=tuple(raw.get("card_types", CARD_TYPES)),
         audio=audio,
+        card_settings=merge_card_settings(raw.get("card_settings")),
         mode=str(selection.get("mode", "")),
         tags=tags,
         individual_simplified=individual_simplified,
     )
+
+
+def parse_bool(value: Any, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"deck config {field_name} must be boolean")
+
+
+def parse_int(value: Any, field_name: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"deck config {field_name} must be an integer")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"deck config {field_name} must be an integer") from exc
+    if parsed < minimum or parsed > maximum:
+        raise ValueError(f"deck config {field_name} must be between {minimum} and {maximum}")
+    return parsed
+
+
+def normalize_card_setting(value: Any, field_name: str) -> Any:
+    if field_name.endswith(".practice"):
+        practice = str(value).strip().casefold()
+        if practice not in {"simplified", "traditional"}:
+            raise ValueError(f"deck config {field_name} must be 'simplified' or 'traditional'")
+        return practice
+    if field_name.endswith(".grid_size"):
+        return parse_int(value, field_name, 100, 1000)
+    if field_name.endswith(".stroke_width"):
+        return parse_int(value, field_name, 2, 100)
+    if field_name.endswith(".hint_after_misses"):
+        return parse_int(value, field_name, 0, 10)
+    return parse_bool(value, field_name)
+
+
+def merge_card_settings(raw: Any) -> dict[str, dict[str, dict[str, Any]]]:
+    settings = default_card_settings()
+    if raw is None:
+        return settings
+    if not isinstance(raw, dict):
+        raise ValueError("deck config card_settings must be an object")
+
+    for card_type, card_settings in raw.items():
+        if card_type not in settings:
+            raise ValueError(f"deck config card_settings has unknown card type: {card_type}")
+        if not isinstance(card_settings, dict):
+            raise ValueError(f"deck config card_settings.{card_type} must be an object")
+        for side, side_settings in card_settings.items():
+            if side not in settings[card_type]:
+                raise ValueError(f"deck config card_settings.{card_type} has unknown side: {side}")
+            if not isinstance(side_settings, dict):
+                raise ValueError(f"deck config card_settings.{card_type}.{side} must be an object")
+            for key, value in side_settings.items():
+                if key not in settings[card_type][side]:
+                    raise ValueError(
+                        f"deck config card_settings.{card_type}.{side} has unknown setting: {key}"
+                    )
+                field_name = f"card_settings.{card_type}.{side}.{key}"
+                settings[card_type][side][key] = normalize_card_setting(value, field_name)
+
+    return settings
 
 
 class NoteEntry(Protocol):
@@ -255,9 +401,19 @@ def inject_hanzi_data_bundle(template: str, bundle_path: Path) -> str:
     return template[:pos] + inline_script + template[pos:]
 
 
-def read_template(card_type: str, path: str | Path, hw_data_bundle: Path | None = None) -> str:
+def inject_card_settings(template: str, card_type: str, config: DeckConfig) -> str:
+    return template.replace("__HANZI_CARD_SETTINGS__", config.card_settings_json(card_type))
+
+
+def read_template(
+    card_type: str,
+    path: str | Path,
+    config: DeckConfig,
+    hw_data_bundle: Path | None = None,
+) -> str:
     template = read_text(path)
-    if card_type == "Write":
+    template = inject_card_settings(template, card_type, config)
+    if card_type == "Write" and "/*! Hanzi Writer v" in template:
         template = inject_hanzi_writer_bundle(template)
         if hw_data_bundle:
             template = inject_hanzi_data_bundle(template, hw_data_bundle)
@@ -280,8 +436,8 @@ def create_models(config: DeckConfig | None = None, hw_data_bundle: Path | None 
             templates=[
                 {
                     "name": f"Card 1 - {card_type}",
-                    "qfmt": read_template(card_type, front_path, hw_data_bundle),
-                    "afmt": read_text(back_path),
+                    "qfmt": read_template(card_type, front_path, config, hw_data_bundle),
+                    "afmt": read_template(card_type, back_path, config),
                 }
             ],
             css=css,

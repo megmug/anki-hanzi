@@ -9,8 +9,8 @@ build helpers in `scripts/deck_build_common.py` for templates, media, and stable
 Anki ids.
 
 `deck_inputs/deck_config.json` controls which tagged hanzi forms are emitted
-as notes. This first config layer selects target forms only; card
-types are still the fixed Meaning, Pinyin, and Write set.
+as notes, which card types are generated, and optional per-card display
+settings that are baked into the templates.
 
 Run from the repository root inside the Nix shell:
 
@@ -789,6 +789,7 @@ def build_package(
         "deck_root": common.DECK_ROOT,
         "build_id": build_id,
         "card_types": list(config.card_types),
+        "card_settings": config.card_settings,
         "dedupe_key": database.get("enrichment", {}).get("dedupe_key"),
         "total_words": len(entries),
         "total_cards": total_cards,
