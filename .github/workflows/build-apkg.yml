@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-apkg-${{ github.ref }}
@@ -37,7 +37,36 @@ jobs:
       - name: Collect build artifacts
         run: |
           mkdir -p ci-artifacts
-          cp -L result/*.apkg result/*.json ci-artifacts/
+          SHORT_SHA="${GITHUB_SHA::7}"
+          RELEASE_NAME="anki-hanzi-${SHORT_SHA}"
+          cp -L result/anki-hanzi.apkg "ci-artifacts/${RELEASE_NAME}.apkg"
+          cp -L result/*.json ci-artifacts/
+          cp deck_inputs/deck_config.json ci-artifacts/
+          if compgen -G "migration/*.py" > /dev/null; then
+            cp migration/*.py ci-artifacts/
+          fi
+          {
+            echo "# anki-hanzi APKG build"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Build ID: \`${GITHUB_SHA::7}\`"
+            echo "- Source ref: \`${GITHUB_REF_NAME}\`"
+            echo
+            echo "## Included artifacts"
+            echo
+            echo "- \`${RELEASE_NAME}.apkg\`"
+            echo "- \`deck_config.json\`"
+            echo "- \`generate_hanzi_report.json\`"
+            echo "- \`hanzi_enrichment_report.json\`"
+            echo "- \`cc_cedict_hanzi_enriched.json\`"
+            echo "- migration scripts from \`migration/*.py\`, if present"
+            echo
+            echo "## Migration script naming"
+            echo
+            echo "Release and APKG names use the target build hash. Migration scripts keep"
+            echo "their checked-in filenames. A file named \`migrate-<old-hash>.py\` means:"
+            echo "migrate from that old build hash to this release's target build."
+          } > ci-artifacts/README.md
 
       - name: Upload APKG artifacts
         uses: actions/upload-artifact@v6
@@ -46,3 +75,25 @@ jobs:
           path: ci-artifacts/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create or update release
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAG="anki-hanzi-${SHORT_SHA}"
+          TITLE="$TAG"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" ci-artifacts/* --clobber
+            gh release edit "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file ci-artifacts/README.md
+          else
+            gh release create "$TAG" ci-artifacts/* \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file ci-artifacts/README.md
+          fi
