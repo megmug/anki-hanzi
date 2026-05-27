@@ -46,8 +46,7 @@ written there.
 ## Repository Layout
 
 - `deck_inputs/`: committed source inputs for the deck build, including card
-  templates, deck config, the pinned CC-CEDICT snapshot, extra words, audio
-  inputs, and the HSK/xiehanzi word-list submodule.
+  templates, deck config, the pinned CC-CEDICT snapshot, and the HSK/xiehanzi word-list submodule.
 - `scripts/`: the Python source-of-truth build pipeline.
 - `.github/workflows/`: CI build workflow that runs the Nix build and uploads
   artifacts.
