@@ -56,6 +56,7 @@ STATIC_MEDIA = [
 
 
 DEFAULT_CONFIG_PATH = DECK_INPUTS_DIR / "deck_config.json"
+TAG_NAMESPACE = "hanzi"
 
 
 # Hardcoded voice pools — not configurable per deck to keep builds predictable
@@ -338,6 +339,21 @@ def stable_note_guid(note_id: str) -> str:
     return genanki.guid_for(str(note_id or "").strip())
 
 
+def anki_tag_name(tag: str) -> str:
+    tag = tag.strip()
+    if not tag:
+        return ""
+    if tag.casefold().startswith(f"{TAG_NAMESPACE}::"):
+        return TAG_NAMESPACE + tag[len(TAG_NAMESPACE) :]
+    if ":" in tag:
+        return f"{TAG_NAMESPACE}::" + "::".join(part for part in tag.split(":") if part)
+    return f"{TAG_NAMESPACE}::{tag}"
+
+
+def anki_tag_names(tags: tuple[str, ...]) -> list[str]:
+    return sorted({formatted for tag in tags if (formatted := anki_tag_name(tag))})
+
+
 def read_text(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
@@ -461,7 +477,7 @@ def create_deck(
             genanki.Note(
                 model=model,
                 fields=fields,
-                tags=list(entry.tags),
+                tags=anki_tag_names(entry.tags),
                 guid=stable_note_guid(note_id),
             )
         )

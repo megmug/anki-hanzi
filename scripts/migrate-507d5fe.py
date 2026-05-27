@@ -225,18 +225,18 @@ def infer_kind(notetype_name, template_name_value, deck_name_value):
 
 
 def infer_scope(tags_value, deck_name_value=""):
-    """Extract HSK scope from note tags (new flat hierarchy) or deck name (old hierarchy).
-    
-    Tags are now on notes, e.g. 'hsk:1', 'hsk:2', 'hsk:7-9', 'extra'.
+    """Extract HSK scope from note tags or deck name.
+
+    Tags are now on notes, e.g. 'hsk:1' or 'hanzi::hsk::1'.
     For old notes without tags, falls back to deck name parsing.
     """
     # Try tags first (new structure)
     tags = (tags_value or "").strip()
-    hsk_levels = re.findall(r"hsk:(7-9|\d+)", tags)
+    hsk_levels = re.findall(r"(?:^|\s)(?:Hanzi::)?hsk(?:::|:)(7-9|\d+)(?=\s|$)", tags, re.IGNORECASE)
     if hsk_levels:
         levels = sorted(hsk_levels, key=lambda x: int(x.replace("7-9", "79")))
         return "HSK " + levels[0]
-    if "extra" in tags.lower():
+    if re.search(r"(?:^|\s)(?:Hanzi::)?extra(?=\s|$)", tags, re.IGNORECASE):
         return "Extra"
     
     # Fallback to deck name (old structure)
