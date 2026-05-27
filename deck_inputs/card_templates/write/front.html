@@ -420,7 +420,7 @@
     }
 
     function createQuizScoreTracker(characterCount) {
-        var mistakePenalty = 8;
+        var mistakePenaltyStrokeRatio = 0.8;
         var assistPenalty = 20;
         var totalStrokesByChar = [];
         var correctStrokesByChar = [];
@@ -448,6 +448,8 @@
             var totalStrokes = sum(totalStrokesByChar);
             var correctStrokes = sum(correctStrokesByChar);
             var baseScore = totalStrokes ? (correctStrokes / totalStrokes) * 100 : 0;
+            var pointsPerStroke = totalStrokes ? 100 / totalStrokes : 0;
+            var mistakePenalty = pointsPerStroke * mistakePenaltyStrokeRatio;
             var score = clampScore(baseScore - mistakes * mistakePenalty - assists * assistPenalty);
             var state = {
                 score: score,
