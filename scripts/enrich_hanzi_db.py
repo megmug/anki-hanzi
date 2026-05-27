@@ -36,7 +36,6 @@ DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_hanzi_enriched.json")
 DEFAULT_REPORT = Path("master_db_output/hanzi_enrichment_report.json")
 DEFAULT_DECK_INPUTS_DIR = Path("deck_inputs")
 DEFAULT_HSK_DATA_DIR = DEFAULT_DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Anki xiehanzi"
-DEFAULT_EXTRA_WORDS = DEFAULT_DECK_INPUTS_DIR / "extra_words.tsv"
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
 HANZI_FIELDS = [
@@ -176,9 +175,6 @@ def make_entry(
     meaning_html = row[7]
 
     tags = ["source:xiehanzi", *level_tags(deck_level, raw_level)]
-    if source == "Extra":
-        tags.append("extra")
-
     return {
         "simplified": simplified,
         "traditional": traditional,
@@ -215,24 +211,20 @@ def read_word_file(path: Path, source: str, deck_level: str) -> list[dict[str, A
     return entries
 
 
-def load_hanzi_entries(hsk_data_dir: Path, extra_words: Path) -> list[dict[str, Any]]:
+def load_hanzi_entries(hsk_data_dir: Path) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for level in LEVELS:
         path = hsk_data_dir / f"HSK_Level_{level}.txt"
         entries.extend(read_word_file(path, source=f"HSK {level}", deck_level=level))
 
-    if extra_words.exists():
-        entries.extend(read_word_file(extra_words, source="Extra", deck_level="Extra"))
-
     return entries
 
 
-def dedupe_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def dedupe_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     kept_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     kept_entries: list[dict[str, Any]] = []
     dropped_duplicates: list[dict[str, Any]] = []
-    skipped_extra_duplicates: list[dict[str, Any]] = []
-    next_deck_order = {level: 0 for level in [*LEVELS, "Extra"]}
+    next_deck_order = {level: 0 for level in LEVELS}
 
     for entry in entries:
         key = dedupe_key(entry)
@@ -248,14 +240,11 @@ def dedupe_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
             "key": printable_key(key),
             "kept": entry_summary(existing),
             "dropped": entry_summary(entry),
-            "reason": "already present in HSK data" if entry["source"] == "Extra" else "duplicate hanzi entry",
+            "reason": "duplicate hanzi entry",
         }
-        if entry["source"] == "Extra":
-            skipped_extra_duplicates.append(duplicate_record)
-        else:
-            dropped_duplicates.append(duplicate_record)
+        dropped_duplicates.append(duplicate_record)
 
-    return kept_entries, dropped_duplicates, skipped_extra_duplicates
+    return kept_entries, dropped_duplicates
 
 
 def build_word_index(words: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -446,7 +435,7 @@ def attach_deck_entries_to_words(
 
 
 def summarize_by_level(entries: list[dict[str, Any]]) -> dict[str, int]:
-    counts = {level: 0 for level in [*LEVELS, "Extra"]}
+    counts = {level: 0 for level in LEVELS}
     for entry in entries:
         counts[entry["deck_level"]] = counts.get(entry["deck_level"], 0) + 1
     return counts
@@ -457,14 +446,13 @@ def enrich_database(
     output_path: Path,
     report_path: Path,
     hsk_data_dir: Path,
-    extra_words: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     master_db = json.loads(master_db_path.read_text(encoding="utf-8"))
     base_words = list(master_db.get("words") or [])
     base_word_index = build_word_index(base_words)
 
-    raw_entries = load_hanzi_entries(hsk_data_dir=hsk_data_dir, extra_words=extra_words)
-    deck_entries, dropped_duplicates, skipped_extra_duplicates = dedupe_entries(raw_entries)
+    raw_entries = load_hanzi_entries(hsk_data_dir=hsk_data_dir)
+    deck_entries, dropped_duplicates = dedupe_entries(raw_entries)
 
     missing_raw_before_stubs = [
         entry_summary(entry)
@@ -492,7 +480,6 @@ def enrich_database(
             "name": "hanzi New HSK (2025)",
             "fields": HANZI_FIELDS,
             "hsk_data_dir": str(hsk_data_dir),
-            "extra_words": str(extra_words) if extra_words.exists() else None,
             "dedupe_key": "Simplified + normalized Pinyin",
         },
         "summary": {
@@ -502,7 +489,6 @@ def enrich_database(
             "raw_hanzi_entries": len(raw_entries),
             "deck_entries_after_dedupe": len(deck_entries),
             "dropped_duplicate_entries": len(dropped_duplicates),
-            "skipped_extra_duplicates": len(skipped_extra_duplicates),
             "raw_entries_missing_base_word": len(missing_raw_before_stubs),
             "deck_entries_missing_base_word": len(missing_deck_entries_before_stubs),
             "deck_entries_missing_enriched_word": len(missing_deck_after_stubs),
@@ -517,7 +503,6 @@ def enrich_database(
         "hanzi": {
             "study_targets_location": "words[].forms[].tags",
             "dropped_duplicates": dropped_duplicates,
-            "skipped_extra_duplicates": skipped_extra_duplicates,
         },
     }
 
@@ -537,7 +522,6 @@ def enrich_database(
             "missing_deck_entries_after_stubs": missing_deck_after_stubs[:25],
             "hanzi_form_stubs": form_stats["created_entries"],
             "dropped_duplicates": dropped_duplicates[:25],
-            "skipped_extra_duplicates": skipped_extra_duplicates[:25],
         },
     }
 
@@ -559,7 +543,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output enriched JSON.")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT, help="Output enrichment report JSON.")
     parser.add_argument("--hsk-data-dir", type=Path, default=DEFAULT_HSK_DATA_DIR, help="Prepared hanzi HSK TSV directory.")
-    parser.add_argument("--extra-words", type=Path, default=DEFAULT_EXTRA_WORDS, help="Optional extra words TSV.")
     return parser.parse_args()
 
 
@@ -577,7 +560,6 @@ def main() -> int:
         output_path=args.output,
         report_path=args.report,
         hsk_data_dir=args.hsk_data_dir,
-        extra_words=args.extra_words,
     )
 
     print("hanzi enrichment generated")

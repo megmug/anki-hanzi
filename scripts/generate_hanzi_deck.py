@@ -809,8 +809,6 @@ def build_package(
         "removed_zero_length_audio_files": removed_zero_length_audio,
         "dropped_duplicate_occurrences": len(database.get("hanzi", {}).get("dropped_duplicates", [])),
         "dropped_duplicates": database.get("hanzi", {}).get("dropped_duplicates", []),
-        "skipped_extra_duplicate_occurrences": len(database.get("hanzi", {}).get("skipped_extra_duplicates", [])),
-        "skipped_extra_duplicates": database.get("hanzi", {}).get("skipped_extra_duplicates", []),
         "missing_audio_files": missing_audio,
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -869,7 +867,7 @@ def main() -> int:
     console_report = {
         key: value
         for key, value in report.items()
-        if key not in {"dropped_duplicates", "skipped_extra_duplicates"}
+        if key != "dropped_duplicates"
     }
     print(json.dumps(console_report, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
