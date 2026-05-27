@@ -250,7 +250,7 @@ let
       cp build_reports/generate_hanzi_report.json "$out/"
       cp master_db_output/cc_cedict_hanzi_enriched.json "$out/"
       cp master_db_output/hanzi_enrichment_report.json "$out/"
-      find migration -maxdepth 1 -type f -name '*.py' -exec cp {} "$out/" \;
+      find scripts -maxdepth 1 -type f -name 'migrate-*.py' -exec cp {} "$out/" \;
 
       runHook postInstall
     '';

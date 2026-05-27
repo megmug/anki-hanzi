@@ -21,6 +21,9 @@ Pipeline stages:
 - `generate_hanzi_deck.py`: generate the APKG from the enriched JSON
   database. It reads `deck_inputs/deck_config.json` to select which hanzi
   study targets become notes.
+- `migrate-*.py`: stateful Anki Debug Console migration scripts. A filename
+  `migrate-<old-hash>.py` migrates from that old build hash to the target APKG
+  it is released with.
 - `verify_apkg_hash.py`: enforce or record the generated APKG hash against
   `deck_inputs/apkg_build_invariant.json`.
 - `update_cc_cedict_snapshot.py`: refresh the pinned CC-CEDICT snapshot when an
