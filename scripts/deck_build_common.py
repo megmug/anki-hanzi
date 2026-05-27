@@ -188,6 +188,10 @@ def stable_note_id(card_type: str, simplified: str, pinyin: str) -> str:
     )
 
 
+def stable_note_guid(note_id: str) -> str:
+    return genanki.guid_for(str(note_id or "").strip())
+
+
 def read_text(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
@@ -295,7 +299,16 @@ def create_deck(
 ) -> genanki.Deck:
     deck = genanki.Deck(stable_id(f"deck:{deck_name}"), deck_name)
     for entry in entries:
-        deck.add_note(genanki.Note(model=model, fields=entry.fields(card_type, build_id), tags=list(entry.tags)))
+        fields = entry.fields(card_type, build_id)
+        note_id = fields[7]
+        deck.add_note(
+            genanki.Note(
+                model=model,
+                fields=fields,
+                tags=list(entry.tags),
+                guid=stable_note_guid(note_id),
+            )
+        )
     return deck
 
 
