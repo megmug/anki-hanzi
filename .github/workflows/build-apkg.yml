@@ -42,9 +42,7 @@ jobs:
           cp -L result/anki-hanzi-${SHORT_SHA}.apkg ci-artifacts/
           cp -L result/*.json ci-artifacts/
           cp deck_inputs/deck_config.json ci-artifacts/
-          if compgen -G "migration/*.py" > /dev/null; then
-            cp migration/*.py ci-artifacts/
-          fi
+          find -H result -maxdepth 1 -type f -name '*.py' -exec cp -L {} ci-artifacts/ \;
           {
             echo "# anki-hanzi APKG build"
             echo
@@ -59,7 +57,7 @@ jobs:
             echo "- \`generate_hanzi_report.json\`"
             echo "- \`hanzi_enrichment_report.json\`"
             echo "- \`cc_cedict_hanzi_enriched.json\`"
-            echo "- migration scripts from \`migration/*.py\`, if present"
+            echo "- migration scripts from the Nix result, if present"
             echo
             echo "## Migration script naming"
             echo
