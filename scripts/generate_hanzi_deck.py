@@ -34,7 +34,7 @@ import genanki
 
 import deck_build_common as common
 from deck_build_common import DeckConfig
-from meaning_html import numbered_to_display, render_meaning_html
+from meaning_html import numbered_to_display, render_meaning_group, render_meaning_html
 
 
 DEFAULT_ENRICHED_DB = Path("master_db_output/cc_cedict_hanzi_enriched.json")
@@ -52,6 +52,7 @@ class EnrichedWordEntry:
     simplified: str
     pinyin: str
     definition_html: str
+    meaning_definition_html: str
     audio_filename_female: str
     audio_filename_male: str
     tags: tuple[str, ...] = ()
@@ -71,10 +72,11 @@ class EnrichedWordEntry:
 
     def fields(self, card_type: str, build_id: str) -> list[str]:
         note_id = common.stable_note_id(card_type, self.simplified, self.pinyin)
+        meaning_html = self.meaning_definition_html if card_type == "Meaning" else self.definition_html
         return [
             self.simplified,
             self.pinyin,
-            self.definition_html,
+            meaning_html,
             self.audio_ref,
             note_id,
             build_id,
@@ -237,6 +239,69 @@ def _resolve_display_pinyin(form: dict[str, Any]) -> str:
     return numbered_to_display(str(form.get("pinyin", "")))
 
 
+def _effective_form_tags(word: dict[str, Any], form: dict[str, Any]) -> set[str]:
+    form_tags = set(form.get("tags", []))
+    fallback_tags = set(word.get("tags", []))
+    return form_tags or fallback_tags
+
+
+def _is_form_selected(
+    effective_tags: set[str],
+    mode: str,
+    selection_tags: set[str],
+    is_individual: bool,
+) -> bool:
+    if is_individual:
+        return True
+    if mode == "all":
+        return True
+    if mode == "tagged":
+        return bool(effective_tags & selection_tags)
+    return False
+
+
+def _selected_reading_groups(
+    word: dict[str, Any],
+    forms: list[dict[str, Any]],
+    mode: str,
+    selection_tags: set[str],
+    is_individual: bool,
+) -> list[dict[str, Any]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    display_by_key: dict[str, str] = {}
+    selected_display_by_key: dict[str, str] = {}
+
+    for form in forms:
+        display_pinyin = _resolve_display_pinyin(form)
+        normalized_pinyin = common.normalized_note_pinyin(display_pinyin)
+        if not normalized_pinyin:
+            continue
+
+        groups.setdefault(normalized_pinyin, []).append(form)
+        display_by_key.setdefault(normalized_pinyin, display_pinyin)
+
+        effective_tags = _effective_form_tags(word, form)
+        if _is_form_selected(effective_tags, mode, selection_tags, is_individual):
+            selected_display_by_key.setdefault(normalized_pinyin, display_pinyin)
+
+    reading_groups: list[dict[str, Any]] = []
+    for normalized_pinyin, group_forms in groups.items():
+        if normalized_pinyin not in selected_display_by_key:
+            continue
+
+        group_tags: set[str] = set()
+        for form in group_forms:
+            group_tags.update(_effective_form_tags(word, form))
+
+        reading_groups.append({
+            "display_pinyin": selected_display_by_key.get(normalized_pinyin)
+            or display_by_key[normalized_pinyin],
+            "forms": group_forms,
+            "tags": group_tags,
+        })
+    return reading_groups
+
+
 def load_enriched_entries(
     enriched_db_path: Path,
     selection: DeckSelection,
@@ -262,17 +327,14 @@ def load_enriched_entries(
             forms = [{}]
 
         word_entry_count = 0
-        for form in forms:
-            form_tags = set(form.get("tags", []))
-            fallback_tags = set(word.get("tags", []))
-            effective_tags = form_tags or fallback_tags
-
-            if mode == "tagged" and not (effective_tags & selection_tags) and not is_individual:
-                continue
-            if mode not in {"all", "tagged"} and not is_individual:
-                continue
-
-            display_pinyin = _resolve_display_pinyin(form)
+        for reading_group in _selected_reading_groups(
+            word=word,
+            forms=forms,
+            mode=mode,
+            selection_tags=selection_tags,
+            is_individual=is_individual,
+        ):
+            display_pinyin = reading_group["display_pinyin"]
             entry_key = (simplified, common.normalized_note_pinyin(display_pinyin))
             if not entry_key[1] or entry_key in seen_entry_keys:
                 continue
@@ -286,9 +348,10 @@ def load_enriched_entries(
                 simplified=simplified,
                 pinyin=display_pinyin,
                 definition_html=rendered_definition_html,
+                meaning_definition_html=render_meaning_group(word, reading_group["forms"]),
                 audio_filename_female=config.audio_filenames(simplified)[0] if include_audio else "",
                 audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
-                tags=tuple(sorted(effective_tags | {"source:xiehanzi"})),
+                tags=tuple(sorted(reading_group["tags"] | {"source:xiehanzi"})),
             )
             entries.append(entry)
             word_entry_count += 1

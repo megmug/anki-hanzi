@@ -124,6 +124,31 @@ def render_meaning_form(word: dict[str, Any], form: dict[str, Any]) -> str:
     return "".join(output)
 
 
+def merge_meaning_forms(forms: list[dict[str, Any]]) -> dict[str, Any]:
+    if not forms:
+        return {"pinyin": "", "definitions": []}
+
+    definitions: list[str] = []
+    seen: set[str] = set()
+    for form in forms:
+        for definition in rendered_definitions(form):
+            if definition in seen:
+                continue
+            definitions.append(definition)
+            seen.add(definition)
+
+    return {
+        "pinyin": str(forms[0].get("pinyin") or ""),
+        "definitions": definitions,
+    }
+
+
+def render_meaning_group(word: dict[str, Any], forms: list[dict[str, Any]]) -> str:
+    if not forms:
+        return ""
+    return render_meaning_form(word, merge_meaning_forms(forms))
+
+
 def render_meaning_html(word: dict[str, Any]) -> str:
     return "".join(
         render_meaning_form(word, form)
