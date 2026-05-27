@@ -4,10 +4,10 @@ Build a pinned CC-CEDICT master JSON database.
 
 This is a prototype importer for the longer-term data pipeline:
 
-    pinned CC-CEDICT zip -> master JSON -> enrichment overlays -> deck generator
+    pinned CC-CEDICT text file -> master JSON -> enrichment overlays -> deck generator
 
 The output is intentionally a compact lexical projection. It can be rebuilt from
-the pinned source zip, so it avoids storing raw source lines and other debug
+the pinned source text, so it avoids storing raw source lines and other debug
 provenance that is not needed by the deck generator.
 """
 
@@ -17,13 +17,11 @@ import argparse
 import json
 import re
 import sys
-import zipfile
 from pathlib import Path
 from typing import Any
 
 DEFAULT_SNAPSHOT_MANIFEST = Path("deck_inputs/cc-cedict/snapshot.json")
 DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_master.json")
-EXPECTED_ZIP_MEMBER = "cedict_ts.u8"
 
 LINE_RE = re.compile(r"^(?P<traditional>\S+)\s+(?P<simplified>\S+)\s+\[(?P<pinyin>.+?)\]\s+/(?P<definitions>.*)/$")
 
@@ -143,7 +141,7 @@ def load_snapshot_manifest(path: Path) -> dict[str, Any]:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     missing_fields = [
         field
-        for field in ["archive_filename", "sha256", "source_url"]
+        for field in ["source_filename", "sha256", "source_url"]
         if not manifest.get(field)
     ]
     if missing_fields:
@@ -151,35 +149,21 @@ def load_snapshot_manifest(path: Path) -> dict[str, Any]:
     return manifest
 
 
-def resolve_source_zip(manifest_path: Path, manifest: dict[str, Any], override: Path | None) -> Path:
+def resolve_source_file(manifest_path: Path, manifest: dict[str, Any], override: Path | None) -> Path:
     if override is not None:
         return override
-    return manifest_path.parent / manifest["archive_filename"]
+    return manifest_path.parent / manifest["source_filename"]
 
 
-def read_cedict_member(zip_path: Path, member_name: str) -> tuple[str, dict[str, Any]]:
-    with zipfile.ZipFile(zip_path) as archive:
-        info = archive.getinfo(member_name)
-        raw = archive.read(member_name)
-
-    member_metadata = {
-        "name": member_name,
-        "uncompressed_size": info.file_size,
-        "compressed_size": info.compress_size,
-        "zip_timestamp": "%04d-%02d-%02dT%02d:%02d:%02d" % info.date_time,
-    }
-    return raw.decode("utf-8-sig"), member_metadata
-
-
-def build_database(source_zip: Path, url: str, expected_sha256: str, output_path: Path) -> dict[str, Any]:
-    actual_sha256 = sha256_file(source_zip)
+def build_database(source_file: Path, url: str, expected_sha256: str, output_path: Path) -> dict[str, Any]:
+    actual_sha256 = sha256_file(source_file)
     if actual_sha256 != expected_sha256:
         raise ValueError(
-            f"CC-CEDICT zip hash mismatch: expected {expected_sha256}, got {actual_sha256}. "
+            f"CC-CEDICT source hash mismatch: expected {expected_sha256}, got {actual_sha256}. "
             "Update the pin intentionally if this is a new desired snapshot."
         )
 
-    text, member_metadata = read_cedict_member(source_zip, EXPECTED_ZIP_MEMBER)
+    text = source_file.read_text(encoding="utf-8-sig")
     comments, entries, rejected_count = parse_cedict_text(text)
     words = build_lexical_words(entries)
     forms_count = sum(len(word["forms"]) for word in words)
@@ -189,9 +173,8 @@ def build_database(source_zip: Path, url: str, expected_sha256: str, output_path
         "source": {
             "name": "CC-CEDICT",
             "url": url,
-            "zip_sha256": actual_sha256,
-            "zip_path": str(source_zip),
-            "zip_member": member_metadata,
+            "sha256": actual_sha256,
+            "path": str(source_file),
             "comment_header": comments,
         },
         "summary": {
@@ -222,7 +205,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_SNAPSHOT_MANIFEST,
         help="Snapshot manifest with the pinned source filename, SHA256, and source URL.",
     )
-    parser.add_argument("--source-zip", type=Path, default=None, help="Optional pinned CC-CEDICT zip override.")
+    parser.add_argument("--source-file", type=Path, default=None, help="Optional pinned CC-CEDICT text file override.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output master JSON path.")
     return parser.parse_args()
 
@@ -235,19 +218,19 @@ def main() -> int:
         print(error, file=sys.stderr)
         return 2
 
-    source_zip = resolve_source_zip(args.snapshot_manifest, manifest, args.source_zip)
-    if not source_zip.exists():
-        print(f"missing source zip: {source_zip}", file=sys.stderr)
+    source_file = resolve_source_file(args.snapshot_manifest, manifest, args.source_file)
+    if not source_file.exists():
+        print(f"missing source file: {source_file}", file=sys.stderr)
         return 2
 
     database = build_database(
-        source_zip=source_zip,
+        source_file=source_file,
         url=manifest["source_url"],
         expected_sha256=manifest["sha256"],
         output_path=args.output,
     )
     print("CC-CEDICT master JSON generated")
-    print(f"source zip: {source_zip}")
+    print(f"source file: {source_file}")
     print(f"output: {args.output}")
     print(json.dumps(database["summary"], ensure_ascii=False, indent=2, sort_keys=True))
     return 0

@@ -6,10 +6,10 @@ Usage:
 
     python scripts/update_cc_cedict_snapshot.py
 
-The normal build is intentionally offline and reads the committed snapshot from
-deck_inputs/cc-cedict. This script downloads the latest archive from the stable
-MDBG export URL, validates its structure, and refreshes the vendored ZIP,
-manifest, and README.
+The normal build is intentionally offline and reads the committed text snapshot
+from deck_inputs/cc-cedict. This script downloads the latest archive from the
+stable MDBG export URL, validates its structure, extracts the CC-CEDICT text
+member, and refreshes the vendored text file, manifest, and README.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import argparse
 import hashlib
 import json
 import re
-import shutil
 import sys
 import tempfile
 import urllib.request
@@ -28,7 +27,7 @@ from typing import Any
 
 DEFAULT_SOURCE_URL = "https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.zip"
 DEFAULT_VENDOR_DIR = Path("deck_inputs/cc-cedict")
-DEFAULT_VENDOR_ZIP = DEFAULT_VENDOR_DIR / "cedict_1_0_ts_utf-8_mdbg.zip"
+DEFAULT_VENDOR_TEXT = DEFAULT_VENDOR_DIR / "cedict_ts.u8"
 DEFAULT_MANIFEST = DEFAULT_VENDOR_DIR / "snapshot.json"
 DEFAULT_README = DEFAULT_VENDOR_DIR / "README.md"
 EXPECTED_MEMBER = "cedict_ts.u8"
@@ -36,15 +35,7 @@ EXPECTED_MEMBER = "cedict_ts.u8"
 HEADER_RE = re.compile(r"^#!\s*([^=\s]+)=(.*)$")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def read_snapshot_header(zip_path: Path) -> tuple[dict[str, str], dict[str, Any]]:
+def read_snapshot_text(zip_path: Path) -> tuple[bytes, dict[str, str], dict[str, Any]]:
     with zipfile.ZipFile(zip_path) as archive:
         info = archive.getinfo(EXPECTED_MEMBER)
         raw = archive.read(EXPECTED_MEMBER)
@@ -63,18 +54,17 @@ def read_snapshot_header(zip_path: Path) -> tuple[dict[str, str], dict[str, Any]
         "compressed_size": info.compress_size,
         "zip_timestamp": "%04d-%02d-%02dT%02d:%02d:%02d" % info.date_time,
     }
-    return header, member
+    return raw, header, member
 
 
-def build_manifest(source_zip: Path, source_url: str) -> dict[str, Any]:
-    header, member = read_snapshot_header(source_zip)
+def build_manifest(source_text: bytes, header: dict[str, str], member: dict[str, Any], source_url: str) -> dict[str, Any]:
     return {
-        "schema": "hanzi-cc-cedict-snapshot-v1",
+        "schema": "hanzi-cc-cedict-snapshot-v2",
         "source_url": source_url,
-        "archive_filename": DEFAULT_VENDOR_ZIP.name,
-        "sha256": sha256_file(source_zip),
+        "source_filename": DEFAULT_VENDOR_TEXT.name,
+        "sha256": hashlib.sha256(source_text).hexdigest(),
         "cc_cedict_header": header,
-        "zip_member": member,
+        "upstream_zip_member": member,
     }
 
 
@@ -96,9 +86,9 @@ def render_readme(manifest: dict[str, Any]) -> str:
 This directory contains the pinned CC-CEDICT source snapshot used by the local
 deck build.
 
-The upstream MDBG export URL is mutable, so the build vendors the exact source
-archive needed for reproducible APKG generation instead of downloading the
-latest file during `nix-build`.
+The upstream MDBG export URL is mutable, so the build vendors the exact
+CC-CEDICT text file needed for reproducible APKG generation instead of
+downloading the latest file during `nix-build`.
 
 To update the snapshot from the latest upstream export, run:
 
@@ -107,25 +97,26 @@ nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
 ```
 
 The update command downloads the current archive from the URL below, validates
-it, and rewrites this directory. Then rebuild and commit the changed snapshot,
-manifest, and reports if the new data is intentional.
+it, extracts `{manifest["source_filename"]}`, and rewrites this directory. Then rebuild
+and commit the changed snapshot, manifest, and reports if the new data is
+intentional.
 
 - Source URL: `{manifest["source_url"]}`
 - Snapshot date from file header: `{release_date}`
 - Entries from file header: `{entries}`
 - Publisher from file header: `{publisher}`
-- SHA256: `{manifest["sha256"]}`
+- Snapshot file: `{manifest["source_filename"]}`
+- Snapshot SHA256: `{manifest["sha256"]}`
 - License: {license_name}
 """
 
 
-def write_snapshot(source_zip: Path, manifest: dict[str, Any], dry_run: bool) -> None:
+def write_snapshot(source_text: bytes, manifest: dict[str, Any], dry_run: bool) -> None:
     if dry_run:
         return
 
     DEFAULT_VENDOR_DIR.mkdir(parents=True, exist_ok=True)
-    if source_zip.resolve() != DEFAULT_VENDOR_ZIP.resolve():
-        shutil.copyfile(source_zip, DEFAULT_VENDOR_ZIP)
+    DEFAULT_VENDOR_TEXT.write_bytes(source_text)
     DEFAULT_MANIFEST.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -152,14 +143,15 @@ def main() -> int:
     source_zip = args.source_zip
     if source_zip is None:
         temp_dir = tempfile.TemporaryDirectory()
-        source_zip = Path(temp_dir.name) / DEFAULT_VENDOR_ZIP.name
+        source_zip = Path(temp_dir.name) / "cedict_1_0_ts_utf-8_mdbg.zip"
         download_snapshot(args.source_url, source_zip)
     elif not source_zip.exists():
         print(f"missing source zip: {source_zip}", file=sys.stderr)
         return 2
 
     try:
-        manifest = build_manifest(source_zip, args.source_url)
+        source_text, header, member = read_snapshot_text(source_zip)
+        manifest = build_manifest(source_text, header, member, args.source_url)
     except KeyError as error:
         print(f"invalid CC-CEDICT archive: missing {error}", file=sys.stderr)
         if temp_dir is not None:
@@ -171,7 +163,7 @@ def main() -> int:
             temp_dir.cleanup()
         return 2
 
-    write_snapshot(source_zip, manifest, args.dry_run)
+    write_snapshot(source_text, manifest, args.dry_run)
     if temp_dir is not None:
         temp_dir.cleanup()
     action = "validated" if args.dry_run else "updated"
