@@ -14,7 +14,9 @@ Current intentional policy:
 - Cards are matched by NoteID. For old source notes without a NoteID field,
   the key is derived from kind + Simplified + Pinyin using the current deck builder rule.
 - Cards can be matched loosely by kind, Simplified, and Pinyin if an old source
-  note cannot produce the generated NoteID.
+  note cannot produce the generated NoteID. Pinyin cards are matched loosely by
+  kind and Simplified only, because newer Pinyin cards are word-level and can
+  contain multiple valid readings.
 - Other unmatched touched cards are not migrated.
 - For matched source cards:
   - full scheduler state + revlog is copied only for touched cards
@@ -292,6 +294,11 @@ def build_loose_key(record):
     fields = record.get("fields", {})
     kind = record.get("kind")
     simplified = normalized_match_text(fields.get("Simplified", ""))
+    if kind == "Pinyin":
+        if not simplified:
+            return None
+        return f"{kind}::{simplified}"
+
     pinyin = normalized_match_text(fields.get("Pinyin", ""))
     if not kind or not simplified or not pinyin:
         return None

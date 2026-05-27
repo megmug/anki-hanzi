@@ -55,6 +55,7 @@ class EnrichedWordEntry:
     meaning_definition_html: str
     audio_filename_female: str
     audio_filename_male: str
+    note_pinyin: str | None = None
     tags: tuple[str, ...] = ()
 
     @property
@@ -71,7 +72,8 @@ class EnrichedWordEntry:
         return (self.audio_filename_female, self.audio_filename_male)
 
     def fields(self, card_type: str, build_id: str) -> list[str]:
-        note_id = common.stable_note_id(card_type, self.simplified, self.pinyin)
+        note_pinyin = self.pinyin if self.note_pinyin is None else self.note_pinyin
+        note_id = common.stable_note_id(card_type, self.simplified, note_pinyin)
         meaning_html = self.meaning_definition_html if card_type == "Meaning" else self.definition_html
         return [
             self.simplified,
@@ -173,16 +175,15 @@ def _is_writable_hanzi(text: str) -> bool:
 def build_decks(
     config: DeckConfig,
     models: dict[str, genanki.Model],
-    entries: list[EnrichedWordEntry],
+    entries_by_card_type: dict[str, list[EnrichedWordEntry]],
     build_id: str,
 ) -> list[genanki.Deck]:
     decks: list[genanki.Deck] = []
 
     for card_type in config.card_types:
+        card_entries = entries_by_card_type.get(card_type, [])
         if card_type == "Write":
-            card_entries = [e for e in entries if _is_writable_hanzi(e.simplified)]
-        else:
-            card_entries = entries
+            card_entries = [e for e in card_entries if _is_writable_hanzi(e.simplified)]
         decks.append(
             common.create_deck(
                 deck_name=f"{common.DECK_ROOT}::{card_type}",
@@ -302,16 +303,78 @@ def _selected_reading_groups(
     return reading_groups
 
 
+def _word_tags(word: dict[str, Any], forms: list[dict[str, Any]]) -> set[str]:
+    tags = set(word.get("tags", []))
+    for form in forms:
+        tags.update(form.get("tags", []))
+    return tags
+
+
+def _selected_word_forms(
+    word: dict[str, Any],
+    forms: list[dict[str, Any]],
+    mode: str,
+    selection_tags: set[str],
+    is_individual: bool,
+) -> list[dict[str, Any]]:
+    if is_individual or mode == "all":
+        return forms
+
+    if mode != "tagged":
+        return []
+
+    word_tags = set(word.get("tags", []))
+    for form in forms:
+        if (word_tags | set(form.get("tags", []))) & selection_tags:
+            return forms
+    return []
+
+
+def _display_pinyin_readings(forms: list[dict[str, Any]]) -> str:
+    readings: list[str] = []
+    seen: set[str] = set()
+    for form in forms:
+        display_pinyin = _resolve_display_pinyin(form)
+        normalized_pinyin = common.normalized_note_pinyin(display_pinyin)
+        if not normalized_pinyin or normalized_pinyin in seen:
+            continue
+        seen.add(normalized_pinyin)
+        readings.append(display_pinyin)
+    return " / ".join(readings)
+
+
+def _all_entries(entries_by_card_type: dict[str, list[EnrichedWordEntry]]) -> list[EnrichedWordEntry]:
+    entries: list[EnrichedWordEntry] = []
+    for card_type_entries in entries_by_card_type.values():
+        entries.extend(card_type_entries)
+    return entries
+
+
+def _audio_entries(entries: list[EnrichedWordEntry]) -> list[EnrichedWordEntry]:
+    deduped: list[EnrichedWordEntry] = []
+    seen: set[str] = set()
+    for entry in entries:
+        word = entry.simplified.strip()
+        if not word or word in seen:
+            continue
+        seen.add(word)
+        deduped.append(entry)
+    return deduped
+
+
 def load_enriched_entries(
     enriched_db_path: Path,
     selection: DeckSelection,
     config: DeckConfig,
-) -> tuple[list[EnrichedWordEntry], dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, list[EnrichedWordEntry]], dict[str, Any], dict[str, Any]]:
     database = json.loads(enriched_db_path.read_text(encoding="utf-8"))
-    entries: list[EnrichedWordEntry] = []
+    meaning_entries: list[EnrichedWordEntry] = []
+    pinyin_entries: list[EnrichedWordEntry] = []
+    write_entries: list[EnrichedWordEntry] = []
     matched_individual_simplified: set[str] = set()
     rendered_meaning_html_used = 0
     seen_entry_keys: set[tuple[str, str]] = set()
+    seen_pinyin_words: set[str] = set()
     selection_tags = set(selection.tags)
 
     for word in database.get("words", []):
@@ -325,6 +388,28 @@ def load_enriched_entries(
         forms = word.get("forms", [])
         if not forms:
             forms = [{}]
+
+        include_audio = config.audio.engine.lower().replace("-", "_") != "off"
+        selected_word_forms = _selected_word_forms(
+            word=word,
+            forms=forms,
+            mode=mode,
+            selection_tags=selection_tags,
+            is_individual=is_individual,
+        )
+        display_readings = _display_pinyin_readings(selected_word_forms)
+        if display_readings and simplified not in seen_pinyin_words:
+            seen_pinyin_words.add(simplified)
+            pinyin_entries.append(EnrichedWordEntry(
+                simplified=simplified,
+                pinyin=display_readings,
+                definition_html=rendered_definition_html,
+                meaning_definition_html=rendered_definition_html,
+                audio_filename_female=config.audio_filenames(simplified)[0] if include_audio else "",
+                audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
+                note_pinyin="",
+                tags=tuple(sorted(_word_tags(word, forms) | {"source:xiehanzi"})),
+            ))
 
         word_entry_count = 0
         for reading_group in _selected_reading_groups(
@@ -343,7 +428,6 @@ def load_enriched_entries(
             if is_individual:
                 matched_individual_simplified.add(simplified)
 
-            include_audio = config.audio.engine.lower().replace("-", "_") != "off"
             entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_pinyin,
@@ -353,16 +437,25 @@ def load_enriched_entries(
                 audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
                 tags=tuple(sorted(reading_group["tags"] | {"source:xiehanzi"})),
             )
-            entries.append(entry)
+            meaning_entries.append(entry)
+            write_entries.append(entry)
             word_entry_count += 1
 
         if word_entry_count:
             rendered_meaning_html_used += 1
 
-    entries.sort(key=lambda entry: entry.simplified)
+    entries_by_card_type = {
+        "Meaning": sorted(meaning_entries, key=lambda entry: entry.simplified),
+        "Pinyin": sorted(pinyin_entries, key=lambda entry: entry.simplified),
+        "Write": sorted(write_entries, key=lambda entry: entry.simplified),
+    }
 
     selection_report = {
         **selection.report(),
+        "entries_by_card_type": {
+            card_type: len(entries)
+            for card_type, entries in entries_by_card_type.items()
+        },
         "matched_individual_simplified": sorted(matched_individual_simplified),
         "unmatched_individual_simplified": sorted(
             selection.individual_simplified - matched_individual_simplified
@@ -372,7 +465,7 @@ def load_enriched_entries(
         },
     }
 
-    return entries, database, selection_report
+    return entries_by_card_type, database, selection_report
 
 
 def _prepare_audio_dir() -> list[str]:
@@ -792,7 +885,9 @@ def build_package(
 ) -> dict[str, Any]:
     config = common.load_deck_config(deck_config_path)
     selection = load_deck_selection(deck_config_path)
-    entries, database, selection_report = load_enriched_entries(enriched_db, selection, config)
+    entries_by_card_type, database, selection_report = load_enriched_entries(enriched_db, selection, config)
+    all_entries = _all_entries(entries_by_card_type)
+    audio_entries = _audio_entries(all_entries)
     build_id = resolve_build_id()
 
     static_media = config.static_media()
@@ -801,18 +896,21 @@ def build_package(
         failed_audio_generation,
         removed_zero_length_audio,
         skipped_audio_generation,
-    ) = generate_audio(entries, config)
+    ) = generate_audio(audio_entries, config)
 
     # Build hanzi-writer JS bundle for offline Write deck usage
-    write_entries = [e for e in entries if _is_writable_hanzi(e.simplified)]
+    write_entries = [
+        e for e in entries_by_card_type.get("Write", [])
+        if _is_writable_hanzi(e.simplified)
+    ]
     hw_bundle_path = Path(common.EXTRA_AUDIO_DIR) / "hanzi-writer-data.js"
     hw_bundle_path.parent.mkdir(parents=True, exist_ok=True)
     build_hanzi_writer_bundle(write_entries, hw_bundle_path)
 
     models = common.create_models(config, hw_bundle_path if hw_bundle_path.exists() else None)
-    decks = build_decks(config, models, entries, build_id)
+    decks = build_decks(config, models, entries_by_card_type, build_id)
 
-    media_files, missing_audio = collect_media(entries, static_media)
+    media_files, missing_audio = collect_media(audio_entries, static_media)
 
     package = genanki.Package(decks, media_files=media_files)
     write_package(
@@ -824,6 +922,11 @@ def build_package(
     )
 
     total_cards = sum(len(d.notes) for d in decks)
+    unique_words = {
+        entry.simplified.strip()
+        for entry in all_entries
+        if entry.simplified.strip()
+    }
     report = {
         "output": str(output_apkg),
         "report": str(report_path),
@@ -835,7 +938,11 @@ def build_package(
         "card_types": list(config.card_types),
         "card_settings": config.card_settings,
         "dedupe_key": database.get("enrichment", {}).get("dedupe_key"),
-        "total_words": len(entries),
+        "total_words": len(unique_words),
+        "entries_by_card_type": {
+            card_type: len(entries)
+            for card_type, entries in entries_by_card_type.items()
+        },
         "total_cards": total_cards,
         "decks": len(decks),
         "audio_files_packaged": len(media_files) - len(static_media),
