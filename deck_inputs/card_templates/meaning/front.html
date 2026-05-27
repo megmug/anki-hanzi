@@ -2,10 +2,8 @@
 
 <br>
 
-<div id="char_zhuyin">{{Zhuyin}}</div>
 <div id="char_pinyin">{{Pinyin}}</div>
 <div id="char_sim" class="char-card">{{Simplified}}</div>
-<div id="char_trad" class="char-card">{{Traditional}}</div>
 
 <script>
     window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
@@ -20,14 +18,9 @@
         }
 
         showHide("#char_pinyin", settings.show_pinyin);
-        showHide("#char_zhuyin", settings.show_zhuyin);
         showHide("#char_meaning", settings.show_meaning, "block");
         showHide("#char_sim", settings.show_simplified, "block");
-        showHide("#char_trad", settings.show_traditional, "block");
         showHide(".pinyin", settings.show_pinyin);
-        showHide(".zhuyin", settings.show_zhuyin);
         showHide("#char-sim-id", settings.show_simplified);
-        showHide("#char-trad-id", settings.show_traditional);
-        showHide(".sep", settings.show_traditional);
     })();
 </script>

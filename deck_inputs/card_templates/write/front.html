@@ -4,7 +4,6 @@
 
 <div id="char_pinyin">{{Pinyin}}</div>
 <div id="char_sim" class="char-card">{{Simplified}}</div>
-<div id="char_trad" class="char-card">{{Traditional}}</div>
 <div id="onfinish-character-target-div" class="tappable"></div>
 <div id="xh-writer-practice-wrap">
     <div id="xh-score-panel" class="xh-score-redacted" aria-live="polite">
@@ -121,36 +120,14 @@
         });
     }
 
-    function showTraditionalChar() {
-        var tradChar = document.getElementById("char_trad");
-        var simChar = document.getElementById("char_sim");
-        if (tradChar.innerHTML != simChar.innerHTML) {
-            if (WRITE_SETTINGS.show_traditional) {
-                tradChar.style.display = "block";
-            }
-        } else {
-            if (WRITE_SETTINGS.show_simplified) {
-                tradChar.style.display = "none";
-            }
-        }
-    }
-
     function initWriteSettings() {
         showHide("#char_pinyin", WRITE_SETTINGS.show_pinyin);
         showHide("#char_meaning", WRITE_SETTINGS.show_meaning, "block");
         showHide("#char_sim", WRITE_SETTINGS.show_simplified, "block");
-        showHide("#char_trad", WRITE_SETTINGS.show_traditional, "block");
         showHide(".pinyin", WRITE_SETTINGS.show_pinyin);
         showHide("#char-sim-id", WRITE_SETTINGS.show_simplified);
-        showHide("#char-trad-id", WRITE_SETTINGS.show_traditional);
-        showHide(".sep", WRITE_SETTINGS.show_traditional);
-        showTraditionalChar();
 
-        if (WRITE_SETTINGS.practice == "traditional") {
-            characters = document.getElementById('char_trad').innerHTML;
-        } else {
-            characters = document.getElementById('char_sim').innerHTML;
-        }
+        characters = document.getElementById('char_sim').innerHTML;
     }
 
     function openSidebar(id) {
@@ -734,7 +711,6 @@
 
         playAudio();
         showHide("#char_sim", true);
-        showTraditionalChar();
         showHide("#char_meaning", true, "block");
         if (WRITE_SETTINGS.show_pinyin) {
             showHide(".pinyin", true);

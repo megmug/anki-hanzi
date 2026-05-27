@@ -15,7 +15,7 @@ Compared with upstream, this fork currently:
 - builds a custom deck including all HSK 3.0 2026 words, configurable to include any word from the dictionary CC-CEDICT;
 - removes sentence cards and the separate audio-only card type;
 - keeps Meaning, Pinyin, and Write cards;
-- defaults the templates to Simplified Chinese and Pinyin, with Traditional characters and Zhuyin disabled;
+- keeps generated notes focused on Simplified Chinese, Pinyin, Meaning, Audio, NoteID, and BuildID fields;
 - adds a HanziWriter-based scoring panel for Write cards;
 - builds from a Python/Nix pipeline instead of the old website generator;
 

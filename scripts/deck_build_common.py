@@ -30,10 +30,7 @@ CARD_TYPES = ["Meaning", "Pinyin", "Write"]
 
 FIELDS = [
     {"name": "Simplified"},
-    {"name": "Traditional"},
     {"name": "Pinyin"},
-    {"name": "Zhuyin"},
-    {"name": "PoS"},
     {"name": "Meaning"},
     {"name": "Audio"},
     {"name": "NoteID"},
@@ -87,42 +84,32 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
     "Meaning": {
         "front": {
             "show_pinyin": True,
-            "show_zhuyin": False,
             "show_meaning": True,
             "show_simplified": True,
-            "show_traditional": False,
         },
         "back": {
             "show_pinyin": True,
-            "show_zhuyin": False,
             "show_meaning": True,
             "show_simplified": True,
-            "show_traditional": False,
         },
     },
     "Pinyin": {
         "front": {
             "show_pinyin": True,
-            "show_zhuyin": False,
             "show_meaning": True,
             "show_simplified": True,
-            "show_traditional": False,
         },
         "back": {
             "show_pinyin": True,
-            "show_zhuyin": False,
             "show_meaning": True,
             "show_simplified": True,
-            "show_traditional": False,
         },
     },
     "Write": {
         "front": {
-            "practice": "simplified",
             "show_pinyin": True,
             "show_meaning": True,
             "show_simplified": False,
-            "show_traditional": False,
             "show_grid": False,
             "show_outline": False,
             "stroke_tone_color": True,
@@ -133,11 +120,9 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
             "easy_score_min": 95,
         },
         "back": {
-            "practice": "simplified",
             "show_pinyin": True,
             "show_meaning": True,
             "show_simplified": True,
-            "show_traditional": False,
             "show_grid": False,
             "show_outline": False,
             "stroke_tone_color": True,
@@ -280,11 +265,6 @@ def parse_float(value: Any, field_name: str, minimum: float, maximum: float) -> 
 
 
 def normalize_card_setting(value: Any, field_name: str) -> Any:
-    if field_name.endswith(".practice"):
-        practice = str(value).strip().casefold()
-        if practice not in {"simplified", "traditional"}:
-            raise ValueError(f"deck config {field_name} must be 'simplified' or 'traditional'")
-        return practice
     if field_name.endswith(".grid_size"):
         return parse_int(value, field_name, 100, 1000)
     if field_name.endswith(".stroke_width"):
@@ -476,7 +456,7 @@ def create_deck(
     deck = genanki.Deck(stable_id(f"deck:{deck_name}"), deck_name)
     for entry in entries:
         fields = entry.fields(card_type, build_id)
-        note_id = fields[7]
+        note_id = fields[-2]
         deck.add_note(
             genanki.Note(
                 model=model,

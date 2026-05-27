@@ -34,7 +34,6 @@ import genanki
 
 import deck_build_common as common
 from deck_build_common import DeckConfig
-from dragonmapper import transcriptions
 from meaning_html import numbered_to_display, render_meaning_html
 
 
@@ -51,9 +50,7 @@ GENERATED_ZIP_MEMBERS = {"collection.anki2", "media"}
 @dataclass(frozen=True)
 class EnrichedWordEntry:
     simplified: str
-    traditional: str
     pinyin: str
-    zhuyin: str
     definition_html: str
     audio_filename_female: str
     audio_filename_male: str
@@ -76,10 +73,7 @@ class EnrichedWordEntry:
         note_id = common.stable_note_id(card_type, self.simplified, self.pinyin)
         return [
             self.simplified,
-            self.traditional,
             self.pinyin,
-            self.zhuyin,
-            "",
             self.definition_html,
             self.audio_ref,
             note_id,
@@ -243,13 +237,6 @@ def _resolve_display_pinyin(form: dict[str, Any]) -> str:
     return numbered_to_display(str(form.get("pinyin", "")))
 
 
-def _resolve_zhuyin(display_pinyin: str) -> str:
-    try:
-        return transcriptions.pinyin_to_zhuyin(display_pinyin)
-    except (ValueError, Exception):
-        return ""
-
-
 def load_enriched_entries(
     enriched_db_path: Path,
     selection: DeckSelection,
@@ -294,16 +281,10 @@ def load_enriched_entries(
             if is_individual:
                 matched_individual_simplified.add(simplified)
 
-            traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
-            traditional = traditional_variants[0] if traditional_variants else simplified
-            zhuyin = _resolve_zhuyin(display_pinyin)
-
             include_audio = config.audio.engine.lower().replace("-", "_") != "off"
             entry = EnrichedWordEntry(
                 simplified=simplified,
-                traditional=str(traditional),
                 pinyin=display_pinyin,
-                zhuyin=zhuyin,
                 definition_html=rendered_definition_html,
                 audio_filename_female=config.audio_filenames(simplified)[0] if include_audio else "",
                 audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",

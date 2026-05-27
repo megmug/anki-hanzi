@@ -30,17 +30,17 @@ Example `card_settings` override:
   "card_settings": {
     "Write": {
       "front": {
-        "practice": "simplified",
         "show_pinyin": true,
         "show_meaning": true,
         "show_simplified": false,
-        "show_traditional": false,
         "show_grid": true,
         "show_outline": false,
         "stroke_tone_color": true,
         "grid_size": 400,
         "stroke_width": 64,
-        "hint_after_misses": 0
+        "hint_after_misses": 0,
+        "stroke_leniency": 0.8,
+        "easy_score_min": 95
       }
     }
   }

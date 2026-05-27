@@ -32,7 +32,7 @@
   --drawing: #333;
   --pinyin-color: #ef6c00;
   --simplified-color: #6495ed;
-  --traditional-color: #00796b;
+  --tone-2-color: #00796b;
   --meaning-color: #607d8b;
   --icon-button-background: #63759d;
   --icon-button-background-focus: #7d92c2;
@@ -63,7 +63,7 @@
   --drawing: #fff;
   --pinyin-color: #27b46e;
   --simplified-color: #6495ed;
-  --traditional-color: #fba910;
+  --tone-2-color: #fba910;
   --meaning-color: #00bfa5;
   --icon-button-background: #63759d;
   --icon-button-background-focus: #7d92c2;
@@ -80,7 +80,7 @@
   background-color: #1f1f1f;
 }
 
-/* Simplified and Traditional Kai Ti Fonts */
+/* Kai Ti Fonts */
 /*
 @font-face {
     font-family: 'AR PL KaitiM Big5';
@@ -198,7 +198,7 @@
 }
 
 .text-color2 {
-  color: var(--traditional-color);
+  color: var(--tone-2-color);
 }
 
 .text-color3 {
@@ -348,16 +348,7 @@ img {
   font-size: 16px;
 }
 
-.zhuyin {
-  font-size: 16px;
-}
-
 .py {
-  font-size: 14px;
-  color: gray;
-}
-
-.zy {
   font-size: 14px;
   color: gray;
 }

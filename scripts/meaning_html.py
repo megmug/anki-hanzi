@@ -105,22 +105,13 @@ def rendered_definitions(form: dict[str, Any]) -> list[str]:
 
 def render_meaning_form(word: dict[str, Any], form: dict[str, Any]) -> str:
     simplified = str(word.get("simplified") or "")
-    traditional_variants = form.get("traditional_variants") or word.get("traditional_variants") or []
-    traditional = str(traditional_variants[0]) if traditional_variants else simplified
     pinyin = str(form.get("pinyin") or "")
 
     output = [
         '<div class="char">  ',
         f'<span id="char-sim-id">{colored_characters(simplified, pinyin)} </span>',
+        " </div>",
     ]
-    if traditional and traditional != simplified:
-        output.extend([
-            ' <span class="sep">〔</span>',
-            f'<span id="char-trad-id">  {colored_characters(traditional, pinyin)} </span>',
-            '<span class="sep">〕</span></div>',
-        ])
-    else:
-        output.append(" </div>")
 
     output.extend([
         " ",

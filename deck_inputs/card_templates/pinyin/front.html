@@ -1,16 +1,14 @@
-<div class="header">What is the <span class="question-sub-text">pinyin & zhuyin</span>?</div>
+<div class="header">What is the <span class="question-sub-text">pinyin</span>?</div>
 
 <br>
 
 <div id="char_sim" class="char-card">{{Simplified}}</div>
-<div id="char_trad" class="char-card">{{Traditional}}</div>
 
 <script>
     window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
 
     (function () {
         var frontSettings = (window.HANZI_CARD_SETTINGS && window.HANZI_CARD_SETTINGS.front) || {};
-        var backSettings = (window.HANZI_CARD_SETTINGS && window.HANZI_CARD_SETTINGS.back) || {};
 
         function showHide(selector, isShow, style) {
             document.querySelectorAll(selector).forEach(function (element) {
@@ -19,17 +17,6 @@
         }
 
         showHide("#char_sim", frontSettings.show_simplified, "block");
-        showHide("#char_trad", frontSettings.show_traditional, "block");
-
-        if (backSettings.show_pinyin && !backSettings.show_zhuyin) {
-            document.querySelector(".question-sub-text").innerHTML = "pinyin";
-        } else if (!backSettings.show_pinyin && backSettings.show_zhuyin) {
-            document.querySelector(".question-sub-text").innerHTML = "zhuyin";
-        } else {
-            document.querySelector(".question-sub-text").innerHTML = "pinyin & zhuyin";
-        }
-
         showHide(".pinyin", false);
-        showHide(".zhuyin", false);
     })();
 </script>
