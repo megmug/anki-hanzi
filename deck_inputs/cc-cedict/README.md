@@ -14,14 +14,14 @@ nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
 ```
 
 The update command downloads the current archive from the URL below, validates
-it, extracts `cedict_ts.u8`, and rewrites this directory. Then rebuild and
-commit the changed snapshot, manifest, and reports if the new data is
+it, extracts `cedict_ts.u8`, and rewrites this directory. Then rebuild
+and commit the changed snapshot, manifest, and reports if the new data is
 intentional.
 
 - Source URL: `https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.zip`
-- Snapshot date from file header: `2026-05-19T07:10:24Z`
-- Entries from file header: `124934`
+- Snapshot date from file header: `2026-05-27T08:03:59Z`
+- Entries from file header: `124970`
 - Publisher from file header: `MDBG`
 - Snapshot file: `cedict_ts.u8`
-- Snapshot SHA256: `676c0ebe5354ac79469d850e67e85adfd42b0c2e07b88b0f3c58e24eae87dd24`
+- Snapshot SHA256: `ad88e061638da798d7c659a82300e5f38df40732f6503bce61a3212f2093ef83`
 - License: https://creativecommons.org/licenses/by-sa/4.0/

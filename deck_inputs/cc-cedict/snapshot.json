@@ -1,23 +1,23 @@
 {
   "cc_cedict_header": {
     "charset": "UTF-8",
-    "date": "2026-05-19T07:10:24Z",
-    "entries": "124934",
+    "date": "2026-05-27T08:03:59Z",
+    "entries": "124970",
     "format": "ts",
     "license": "https://creativecommons.org/licenses/by-sa/4.0/",
     "publisher": "MDBG",
     "subversion": "0",
-    "time": "1779174624",
+    "time": "1779869039",
     "version": "1"
   },
   "schema": "hanzi-cc-cedict-snapshot-v2",
-  "sha256": "676c0ebe5354ac79469d850e67e85adfd42b0c2e07b88b0f3c58e24eae87dd24",
+  "sha256": "ad88e061638da798d7c659a82300e5f38df40732f6503bce61a3212f2093ef83",
   "source_filename": "cedict_ts.u8",
   "source_url": "https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.zip",
   "upstream_zip_member": {
-    "compressed_size": 3972217,
+    "compressed_size": 3973569,
     "name": "cedict_ts.u8",
-    "uncompressed_size": 9859538,
-    "zip_timestamp": "2026-05-19T07:10:24"
+    "uncompressed_size": 9863060,
+    "zip_timestamp": "2026-05-27T08:03:58"
   }
 }
