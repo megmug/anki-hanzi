@@ -374,7 +374,7 @@ def load_enriched_entries(
     matched_individual_simplified: set[str] = set()
     rendered_meaning_html_used = 0
     seen_entry_keys: set[tuple[str, str]] = set()
-    seen_pinyin_words: set[str] = set()
+    seen_word_level_words: set[str] = set()
     selection_tags = set(selection.tags)
 
     for word in database.get("words", []):
@@ -398,9 +398,9 @@ def load_enriched_entries(
             is_individual=is_individual,
         )
         display_readings = _display_pinyin_readings(selected_word_forms)
-        if display_readings and simplified not in seen_pinyin_words:
-            seen_pinyin_words.add(simplified)
-            pinyin_entries.append(EnrichedWordEntry(
+        if display_readings and simplified not in seen_word_level_words:
+            seen_word_level_words.add(simplified)
+            word_level_entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_readings,
                 definition_html=rendered_definition_html,
@@ -409,7 +409,9 @@ def load_enriched_entries(
                 audio_filename_male=config.audio_filenames(simplified)[1] if include_audio else "",
                 note_pinyin="",
                 tags=tuple(sorted(_word_tags(word, forms) | {"source:xiehanzi"})),
-            ))
+            )
+            pinyin_entries.append(word_level_entry)
+            write_entries.append(word_level_entry)
 
         word_entry_count = 0
         for reading_group in _selected_reading_groups(
@@ -438,7 +440,6 @@ def load_enriched_entries(
                 tags=tuple(sorted(reading_group["tags"] | {"source:xiehanzi"})),
             )
             meaning_entries.append(entry)
-            write_entries.append(entry)
             word_entry_count += 1
 
         if word_entry_count:
