@@ -24,8 +24,9 @@
 <script>
     window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
 
-    function playAudio() {
+    function collectAudioElements() {
         var audioDiv = document.getElementById('audio');
+        if (!audioDiv) return [];
         var allChildren = audioDiv.getElementsByTagName("*");
         var audioElements = [];
         for (var i = 0; i < allChildren.length; i++) {
@@ -34,6 +35,11 @@
                 audioElements.push(allChildren[i]);
             }
         }
+        return audioElements;
+    }
+
+    function playAudio() {
+        var audioElements = collectAudioElements();
         if (audioElements.length === 0) return;
 
         function playNext(index) {
@@ -55,9 +61,17 @@
         playNext(0);
     }
 
-    document.getElementById("btnPlayAudio").onclick = function () {
-        playAudio();
-    };
+    function setupAudioButton() {
+        var button = document.getElementById("btnPlayAudio");
+        if (!button) return;
+        if (collectAudioElements().length === 0) {
+            button.style.display = "none";
+            return;
+        }
+        button.onclick = function () {
+            playAudio();
+        };
+    }
 
     function showHide(selector, isShow, style) {
         document.querySelectorAll(selector).forEach(function (element) {
@@ -107,6 +121,7 @@
         }
     });
 
+    setupAudioButton();
     applyCardSettings();
 </script>
 <div id="more-info-sidebar" class="more-info-sidebar">
