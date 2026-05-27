@@ -34,16 +34,26 @@
 <div id="ch_load_status" style="color:#ea2322; margin-top: -36px; display: none;">&#8226;</div>
 <div id='audio' style='display:none'>{{Audio}}</div>
 
+<style>
+    #btnMoreOptions {
+        display: none;
+    }
+
+    #back #btnMoreOptions {
+        display: inline-block;
+    }
+</style>
+
 <div class="modal-footer1">
     <a class="btn" id='btnPlayAudio'>
         <div class="icon"><i class="material-icons">play_arrow</i></div>
     </a>
-    <a class="btn" id='btnRevealChar'>
+    <a class="btn" id='btnRevealChar' style="display:none">
         <div class="icon">
             <i class="material-icons">gesture</i>
         </div>
     </a>
-    <a class="btn" id='btnGoNextCard'>
+    <a class="btn" id='btnGoNextCard' style="display:none">
         <div class="icon"><i class="material-icons">navigate_next</i></div>
     </a>
     <a class="btn" id='btnMoreOptions' onclick="openSidebar('more-info-sidebar')">
@@ -585,52 +595,58 @@
         }
 
         var revealClickCount = 0;
-        document.getElementById("btnGoNextCard").onclick = function () {
-            revealClickCount = 0;
-            btnTapAudio();
-            var currentIndex = getCurrentHanziNum();
-            var writer = hanziWriterList[currentIndex];
-            if (writer) {
+        var goNextButton = document.getElementById("btnGoNextCard");
+        if (goNextButton) {
+            goNextButton.onclick = function () {
+                revealClickCount = 0;
+                btnTapAudio();
+                var currentIndex = getCurrentHanziNum();
+                var writer = hanziWriterList[currentIndex];
+                if (writer) {
+                    quizScore.markAssist();
+                    writer.showOutline();
+                    writer.showCharacter();
+                    setTimeout(function () {
+                        onFinishQuizDrawHanzi();
+                    }, 800);
+                    setTimeout(function () {
+                        showNextHanzi();
+                    }, 1000);
+                } else {
+                    onFinishQuizDrawHanzi();
+                    showNextHanzi();
+                }
+            };
+        }
+
+        var revealButton = document.getElementById("btnRevealChar");
+        if (revealButton) {
+            revealButton.onclick = function () {
+                btnTapAudio();
+                var currentIndex = getCurrentHanziNum();
+                var writer = hanziWriterList[currentIndex];
+                if (!writer) {
+                    onFinishQuizDrawHanzi();
+                    showNextHanzi();
+                    return;
+                }
                 quizScore.markAssist();
                 writer.showOutline();
-                writer.showCharacter();
-                setTimeout(function () {
-                    onFinishQuizDrawHanzi();
-                }, 800);
-                setTimeout(function () {
-                    showNextHanzi();
-                }, 1000);
-            } else {
-                onFinishQuizDrawHanzi();
-                showNextHanzi();
-            }
-        };
-
-        document.getElementById("btnRevealChar").onclick = function () {
-            btnTapAudio();
-            var currentIndex = getCurrentHanziNum();
-            var writer = hanziWriterList[currentIndex];
-            if (!writer) {
-                onFinishQuizDrawHanzi();
-                showNextHanzi();
-                return;
-            }
-            quizScore.markAssist();
-            writer.showOutline();
-            if (revealClickCount == 0) {
-                writer.animateCharacter();
-            } else if (revealClickCount == 1) {
-                writer.showCharacter();
-            } else if (revealClickCount == 2) {
-                writer.hideCharacter();
-                writer.hideOutline();
-                writerQuiz(writer, currentIndex);
-            } else {
-                revealClickCount = -1;
-                writerQuiz(writer, currentIndex);
-            }
-            revealClickCount++;
-        };
+                if (revealClickCount == 0) {
+                    writer.animateCharacter();
+                } else if (revealClickCount == 1) {
+                    writer.showCharacter();
+                } else if (revealClickCount == 2) {
+                    writer.hideCharacter();
+                    writer.hideOutline();
+                    writerQuiz(writer, currentIndex);
+                } else {
+                    revealClickCount = -1;
+                    writerQuiz(writer, currentIndex);
+                }
+                revealClickCount++;
+            };
+        }
 
         function writerQuiz(writer, characterIndex) {
             writer.quiz({
