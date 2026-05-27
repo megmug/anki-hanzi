@@ -36,6 +36,11 @@ DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_hanzi_enriched.json")
 DEFAULT_REPORT = Path("master_db_output/hanzi_enrichment_report.json")
 DEFAULT_DECK_INPUTS_DIR = Path("deck_inputs")
 DEFAULT_HSK_DATA_DIR = DEFAULT_DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Anki xiehanzi"
+DEFAULT_FREQUENCY_LIST = (
+    DEFAULT_DECK_INPUTS_DIR
+    / "hsk-3.0-words-list/Scripts and data/blog_lit_news_tech_weibo_freq.release_sorted.txt"
+)
+TOP_FREQUENCY_THRESHOLDS = (500, 2500, 10000)
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
 HANZI_FIELDS = [
@@ -434,6 +439,61 @@ def attach_deck_entries_to_words(
     return unmatched, form_stats
 
 
+def load_frequency_ranks(frequency_list_path: Path) -> dict[str, int]:
+    ranks: dict[str, int] = {}
+    with frequency_list_path.open(encoding="utf-8") as handle:
+        for rank, line in enumerate(handle, start=1):
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 2:
+                continue
+            key = normalize_field(parts[0])
+            if key and key not in ranks:
+                ranks[key] = rank
+    return ranks
+
+
+def top_frequency_tags(rank: int | None) -> list[str]:
+    if rank is None:
+        return []
+    return [f"freq:top{threshold}" for threshold in TOP_FREQUENCY_THRESHOLDS if rank <= threshold]
+
+
+def apply_frequency_tags(words: list[dict[str, Any]], frequency_list_path: Path) -> dict[str, Any]:
+    ranks = load_frequency_ranks(frequency_list_path)
+    tagged_words_by_threshold = {f"top{threshold}": 0 for threshold in TOP_FREQUENCY_THRESHOLDS}
+    tagged_forms_by_threshold = {f"top{threshold}": 0 for threshold in TOP_FREQUENCY_THRESHOLDS}
+    matched_words = 0
+
+    for word in words:
+        rank = ranks.get(normalize_field(str(word.get("simplified") or "")))
+        tags = top_frequency_tags(rank)
+        if not tags:
+            continue
+
+        matched_words += 1
+        word.setdefault("frequency", {})["rank"] = rank
+        append_unique(word.setdefault("tags", []), tags)
+        word["tags"].sort()
+
+        for tag in tags:
+            tagged_words_by_threshold[tag.removeprefix("freq:")] += 1
+
+        for form in word.get("forms", []):
+            append_unique(form.setdefault("tags", []), tags)
+            form["tags"].sort()
+            for tag in tags:
+                tagged_forms_by_threshold[tag.removeprefix("freq:")] += 1
+
+    return {
+        "source": str(frequency_list_path),
+        "thresholds": list(TOP_FREQUENCY_THRESHOLDS),
+        "source_entries": len(ranks),
+        "matched_words": matched_words,
+        "tagged_words_by_threshold": tagged_words_by_threshold,
+        "tagged_forms_by_threshold": tagged_forms_by_threshold,
+    }
+
+
 def summarize_by_level(entries: list[dict[str, Any]]) -> dict[str, int]:
     counts = {level: 0 for level in LEVELS}
     for entry in entries:
@@ -446,6 +506,7 @@ def enrich_database(
     output_path: Path,
     report_path: Path,
     hsk_data_dir: Path,
+    frequency_list_path: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     master_db = json.loads(master_db_path.read_text(encoding="utf-8"))
     base_words = list(master_db.get("words") or [])
@@ -468,6 +529,7 @@ def enrich_database(
     words = [*base_words, *synthetic_words]
     words.sort(key=lambda word: word["simplified"])
     missing_deck_after_stubs, form_stats = attach_deck_entries_to_words(words, deck_entries)
+    frequency_tag_stats = apply_frequency_tags(words, frequency_list_path)
 
     enriched = {
         "schema": "hanzi-enriched-lexicon-v1",
@@ -480,6 +542,8 @@ def enrich_database(
             "name": "hanzi New HSK (2025)",
             "fields": HANZI_FIELDS,
             "hsk_data_dir": str(hsk_data_dir),
+            "frequency_list": str(frequency_list_path),
+            "frequency_tags": [f"freq:top{threshold}" for threshold in TOP_FREQUENCY_THRESHOLDS],
             "dedupe_key": "Simplified + normalized Pinyin",
         },
         "summary": {
@@ -498,6 +562,8 @@ def enrich_database(
             "hanzi_form_pinyin_variant_matches": form_stats["matched_pinyin_variant"],
             "hanzi_form_toneless_matches": form_stats["matched_toneless"],
             "hanzi_form_stubs_created": form_stats["created"],
+            "frequency_tags_by_word": frequency_tag_stats["tagged_words_by_threshold"],
+            "frequency_tags_by_form": frequency_tag_stats["tagged_forms_by_threshold"],
         },
         "words": words,
         "hanzi": {
@@ -512,6 +578,7 @@ def enrich_database(
         "output": str(output_path),
         "report": str(report_path),
         "summary": enriched["summary"],
+        "frequency_tags": frequency_tag_stats,
         "samples": {
             "missing_raw_entries": missing_raw_before_stubs[:25],
             "missing_deck_entries": [
@@ -543,6 +610,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output enriched JSON.")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT, help="Output enrichment report JSON.")
     parser.add_argument("--hsk-data-dir", type=Path, default=DEFAULT_HSK_DATA_DIR, help="Prepared hanzi HSK TSV directory.")
+    parser.add_argument("--frequency-list", type=Path, default=DEFAULT_FREQUENCY_LIST, help="Simplified word frequency list sorted by usage.")
     return parser.parse_args()
 
 
@@ -554,12 +622,16 @@ def main() -> int:
     if not args.hsk_data_dir.exists():
         print(f"missing hanzi HSK data dir: {args.hsk_data_dir}")
         return 2
+    if not args.frequency_list.exists():
+        print(f"missing frequency list: {args.frequency_list}")
+        return 2
 
     enriched, _report = enrich_database(
         master_db_path=args.master_db,
         output_path=args.output,
         report_path=args.report,
         hsk_data_dir=args.hsk_data_dir,
+        frequency_list_path=args.frequency_list,
     )
 
     print("hanzi enrichment generated")
