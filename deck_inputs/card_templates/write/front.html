@@ -215,6 +215,10 @@
     }
 
     var strokeAfterMisses = getHintAfterMisses(WRITE_SETTINGS.hint_after_misses);
+    var strokeLeniency = Number(WRITE_SETTINGS.stroke_leniency);
+    if (!isFinite(strokeLeniency) || strokeLeniency <= 0) {
+        strokeLeniency = 1;
+    }
 
     function btnTapAudio() {
         var audio = new Audio();
@@ -370,7 +374,7 @@
     }
 
     function getQuizScoreSuggestion(score) {
-        if (score >= 90) {
+        if (score >= WRITE_SETTINGS.easy_score_min) {
             return { label: "Easy", className: "xh-score-easy" };
         }
         if (score >= 75) {
@@ -572,6 +576,7 @@
                         outlineColor: outline_color,
                         drawingColor: drawing_color,
                         showHintAfterMisses: strokeAfterMisses,
+                        leniency: strokeLeniency,
                         acceptBackwardsStrokes: false,
                         markStrokeCorrectAfterMisses: false,
                         padding: 5,
