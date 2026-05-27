@@ -1,7 +1,7 @@
 """
 Stateful hanzi migration script for Anki's Debug Console.
 
-Generated for: migrate from commit d5903fc → current
+Generated for: migrate from commit f798e7c → current
 
 WARNING:
 - This script is destructive. Run it only after a full `.colpkg` backup.
@@ -11,15 +11,14 @@ WARNING:
   imported root to FINAL_ROOT.
 
 Current intentional policy:
-- Audio cards are intentionally not migrated when the target APKG no longer
-  contains Audio card templates.
-- Extra cards can be matched loosely by scope, kind, Simplified, and Pinyin when
-  their old note GUIDs do not match the generated APKG.
+- Cards are matched by NoteID. For old source notes without a NoteID field,
+  the key is derived from kind + Simplified + Pinyin using the current deck builder rule.
+- Cards can be matched loosely by kind, Simplified, and Pinyin if an old source
+  note cannot produce the generated NoteID.
 - Other unmatched touched cards are not migrated.
 - For matched source cards:
-  - suspended state is copied for all matched cards
   - full scheduler state + revlog is copied only for touched cards
-- Target-only cards from the APKG remain as fresh new cards.
+- All imported cards without copied learning state are suspended by default.
 
 Required workflow:
 1. Export a full `.colpkg` backup.
@@ -34,6 +33,7 @@ from aqt import mw
 from aqt.operations import on_op_finished
 from aqt.qt import QApplication
 from anki.import_export_pb2 import ImportAnkiPackageOptions, ImportAnkiPackageRequest
+import hashlib
 import html
 import json
 import os
@@ -71,14 +71,13 @@ FINAL_ROOT = DECK_ROOT
 OLD_ROOT = DECK_ROOT
 
 ALLOW_DESTRUCTIVE_MIGRATION = True
-ALLOW_SKIPPED_TOUCHED_KINDS = {"Audio"}
+ALLOW_SKIPPED_TOUCHED_KINDS = set()
 ALLOW_SKIPPED_TOUCHED_SIMPLIFIED = set()
-HANZI_NOTETYPE_PREFIX = "Basic - New HSK (2025) - "
+HANZI_NOTETYPE_PREFIX = "汉字 (Hànzì)::"
 
 FIELD_SEPARATOR = "\x1f"
-KINDS = ["Audio", "Meaning", "Pinyin", "Write"]
+KINDS = ["Meaning", "Pinyin", "Write"]
 KIND_SUFFIXES = {
-    "audio": "Audio",
     "meaning": "Meaning",
     "pinyin": "Pinyin",
     "write": "Write",
@@ -225,7 +224,22 @@ def infer_kind(notetype_name, template_name_value, deck_name_value):
     return None
 
 
-def infer_scope(deck_name_value):
+def infer_scope(tags_value, deck_name_value=""):
+    """Extract HSK scope from note tags (new flat hierarchy) or deck name (old hierarchy).
+    
+    Tags are now on notes, e.g. 'hsk:1', 'hsk:2', 'hsk:7-9', 'extra'.
+    For old notes without tags, falls back to deck name parsing.
+    """
+    # Try tags first (new structure)
+    tags = (tags_value or "").strip()
+    hsk_levels = re.findall(r"hsk:(7-9|\d+)", tags)
+    if hsk_levels:
+        levels = sorted(hsk_levels, key=lambda x: int(x.replace("7-9", "79")))
+        return "HSK " + levels[0]
+    if "extra" in tags.lower():
+        return "Extra"
+    
+    # Fallback to deck name (old structure)
     deck_name_value = deck_name_value or ""
     hsk_match = re.search(r"HSK\s+(7-9|\d+)", deck_name_value)
     if hsk_match:
@@ -255,21 +269,33 @@ def card_is_touched(card, revlog_count):
     )
 
 
-def build_key(guid, scope, kind):
-    if not guid or not scope or not kind:
+def normalized_note_pinyin(value):
+    return " ".join(str(value or "").split()).casefold()
+
+
+def stable_note_id(kind, simplified, pinyin):
+    simplified = plain_text(simplified)
+    pinyin = normalized_note_pinyin(plain_text(pinyin))
+    if not kind or not simplified or not pinyin:
         return None
-    return f"{guid}::{scope}::{kind}"
+    return hashlib.sha256(f"{kind}\0{simplified}\0{pinyin}".encode("utf-8")).hexdigest()
+
+
+def build_key(fields, kind):
+    note_id = (fields.get("NoteID", "") or "").strip()
+    if note_id:
+        return note_id
+    return stable_note_id(kind, fields.get("Simplified", ""), fields.get("Pinyin", ""))
 
 
 def build_loose_key(record):
     fields = record.get("fields", {})
-    scope = record.get("scope")
     kind = record.get("kind")
     simplified = normalized_match_text(fields.get("Simplified", ""))
     pinyin = normalized_match_text(fields.get("Pinyin", ""))
-    if not scope or not kind or not simplified or not pinyin:
+    if not kind or not simplified or not pinyin:
         return None
-    return f"{scope}::{kind}::{simplified}::{pinyin}"
+    return f"{kind}::{simplified}::{pinyin}"
 
 
 def card_summary(record):
@@ -280,6 +306,8 @@ def card_summary(record):
         "loose_key": record.get("loose_key") or build_loose_key(record),
         "scope": record.get("scope"),
         "kind": record.get("kind"),
+        "note_id_field": fields.get("NoteID", ""),
+        "build_id_field": fields.get("BuildID", ""),
         "deck": record.get("deck_name"),
         "notetype": record.get("notetype_name"),
         "template": record.get("template_name"),
@@ -316,7 +344,6 @@ def collect_current_records(root):
     cids = cards_in_decks(dids)
     records = []
     unknown_kind = []
-    unknown_scope = []
 
     for cid in cids:
         card = card_row(cid)
@@ -333,13 +360,14 @@ def collect_current_records(root):
         tmpl_name = template_name(notetype, card["ord"])
         deck_name = deck_name_from_mw(card["did"])
         kind = infer_kind(notetype.get("name", ""), tmpl_name, deck_name)
-        scope = infer_scope(deck_name)
+        scope = infer_scope(tags, deck_name)
+        fields = fields_by_name(field_names, flds)
         revlog_count = int(
             mw.col.db.scalar("select count(*) from revlog where cid = ?", card["id"])
             or 0
         )
         record = {
-            "key": build_key(guid, scope, kind),
+            "key": build_key(fields, kind),
             "scope": scope,
             "kind": kind,
             "note_id": int(note_id),
@@ -349,7 +377,7 @@ def collect_current_records(root):
             "template_name": tmpl_name,
             "deck_id": int(card["did"]),
             "deck_name": deck_name,
-            "fields": fields_by_name(field_names, flds),
+            "fields": fields,
             "card": card,
             "revlog_count": revlog_count,
             "touched": card_is_touched(card, revlog_count),
@@ -360,8 +388,6 @@ def collect_current_records(root):
         records.append(record)
         if not kind:
             unknown_kind.append(record)
-        if not scope:
-            unknown_scope.append(record)
 
     return {
         "root": root,
@@ -369,7 +395,7 @@ def collect_current_records(root):
         "card_ids": cids,
         "records": records,
         "unknown_kind": unknown_kind,
-        "unknown_scope": unknown_scope,
+        "unknown_scope": [],
     }
 
 
@@ -380,10 +406,15 @@ def source_notetypes_from_records(records):
     return by_id
 
 
+OLD_HANZI_NOTETYPE_PREFIX = "Basic - New HSK (2025) - "
+
+
 def is_hanzi_notetype_name(name):
     if not name:
         return False
-    return name.startswith(HANZI_NOTETYPE_PREFIX)
+    return name.startswith(HANZI_NOTETYPE_PREFIX) or name.startswith(
+        OLD_HANZI_NOTETYPE_PREFIX
+    )
 
 
 def remove_empty_source_notetypes(source_notetypes):
@@ -447,6 +478,42 @@ def index_by_key(records):
         else:
             by_key[key] = record
     return by_key, duplicates, missing_key
+
+
+def resolve_source_duplicate_keys(source_by_key, source_duplicates):
+    resolved_by_key = dict(source_by_key)
+    resolved = []
+    unresolved = []
+
+    for key, records in source_duplicates.items():
+        touched = [record for record in records if record.get("touched")]
+
+        if len(touched) > 1:
+            unresolved.append({
+                "key": key,
+                "reason": "multiple touched source cards map to one target card",
+                "cards": [card_summary(record) for record in records],
+            })
+            continue
+
+        if len(touched) == 1:
+            chosen = touched[0]
+        else:
+            continue
+
+        resolved_by_key[key] = chosen
+        resolved.append({
+            "key": key,
+            "reason": "single touched source card chosen",
+            "chosen": card_summary(chosen),
+            "ignored": [
+                card_summary(record)
+                for record in records
+                if record is not chosen
+            ],
+        })
+
+    return resolved_by_key, resolved, unresolved
 
 
 def index_by_loose_key(records):
@@ -571,7 +638,6 @@ def collect_target_records_from_apkg(apkg_path):
 
             records = []
             unknown_kind = []
-            unknown_scope = []
             for row in rows:
                 card = row_dict(CARD_COLUMNS, row[: len(CARD_COLUMNS)])
                 guid, mid, flds, tags = row[len(CARD_COLUMNS) :]
@@ -589,9 +655,16 @@ def collect_target_records_from_apkg(apkg_path):
                 deck = decks.get(int(card["did"]), {})
                 deck_name = deck.get("name", str(card["did"]))
                 kind = infer_kind(model.get("name", ""), tmpl_name, deck_name)
-                scope = infer_scope(deck_name)
+                scope = infer_scope(tags, deck_name)
+                fields = fields_by_name(field_names, flds)
+                revlog_count = int(
+                    conn.execute(
+                        "select count(*) from revlog where cid = ?", (card["id"],)
+                    ).fetchone()[0]
+                    or 0
+                )
                 record = {
-                    "key": build_key(guid, scope, kind),
+                    "key": build_key(fields, kind),
                     "scope": scope,
                     "kind": kind,
                     "note_id": int(card["nid"]),
@@ -601,15 +674,10 @@ def collect_target_records_from_apkg(apkg_path):
                     "template_name": tmpl_name,
                     "deck_id": int(card["did"]),
                     "deck_name": deck_name,
-                    "fields": fields_by_name(field_names, flds),
+                    "fields": fields,
                     "card": card,
-                    "revlog_count": int(
-                        conn.execute(
-                            "select count(*) from revlog where cid = ?", (card["id"],)
-                        ).fetchone()[0]
-                        or 0
-                    ),
-                    "touched": card_is_touched(card, 0),
+                    "revlog_count": revlog_count,
+                    "touched": card_is_touched(card, revlog_count),
                     "suspended": int(card["queue"]) == -1,
                     "tags": tags,
                 }
@@ -617,14 +685,12 @@ def collect_target_records_from_apkg(apkg_path):
                 records.append(record)
                 if not kind:
                     unknown_kind.append(record)
-                if not scope:
-                    unknown_scope.append(record)
 
             return {
                 "db_name": db_name,
                 "records": records,
                 "unknown_kind": unknown_kind,
-                "unknown_scope": unknown_scope,
+                "unknown_scope": [],
             }
         finally:
             conn.close()
@@ -738,7 +804,9 @@ def copy_full_card_state(source_card, target_card_id, copy_columns, now):
     mw.col.db.execute(f"update cards set {', '.join(parts)} where id=?", *values)
 
 
-def suspend_target_card(target_card_id, now):
+def suspend_target_cards(target_card_ids, now):
+    if not target_card_ids:
+        return 0
     card_cols = table_columns("cards")
     parts = ["queue=-1"]
     values = []
@@ -747,8 +815,11 @@ def suspend_target_card(target_card_id, now):
         values.append(now)
     if "usn" in card_cols:
         parts.append("usn=-1")
-    values.append(target_card_id)
-    mw.col.db.execute(f"update cards set {', '.join(parts)} where id=?", *values)
+    mw.col.db.execute(
+        f"update cards set {', '.join(parts)} where id in {ids2str_local(target_card_ids)}",
+        *values,
+    )
+    return len(target_card_ids)
 
 
 def insert_revlog_rows(source_rows, target_card_id, next_id):
@@ -794,21 +865,36 @@ def summarize_kind_counts(records):
     return counts
 
 
+def summarize_build_id_counts(records):
+    return dict(
+        sorted(
+            Counter(
+                (record.get("fields", {}).get("BuildID", "") or "<missing>")
+                for record in records
+            ).items()
+        )
+    )
+
+
 def validate_preflight(source_info, target_preview_info, preset_id):
     source_records = source_info["records"]
     target_preview_records = target_preview_info["records"]
     source_by_key, source_duplicates, source_missing_key = index_by_key(source_records)
+    source_by_key, resolved_source_duplicates, unresolved_source_duplicates = (
+        resolve_source_duplicate_keys(source_by_key, source_duplicates)
+    )
+    touched_source_by_key = {
+        key: record for key, record in source_by_key.items() if record.get("touched")
+    }
     target_by_key, target_duplicates, target_missing_key = index_by_key(target_preview_records)
 
-    match_plan = build_match_plan(source_by_key, target_by_key)
+    match_plan = build_match_plan(touched_source_by_key, target_by_key)
     unmatched_source = [
-        source_by_key[key] for key in match_plan["unmatched_source_keys"]
+        touched_source_by_key[key] for key in match_plan["unmatched_source_keys"]
     ]
-    target_only = [
-        target_by_key[key] for key in match_plan["target_only_keys"]
-    ]
-
-    touched_unmatched = [record for record in unmatched_source if record["touched"]]
+    touched_unmatched = unmatched_source
+    touched_missing_key = [record for record in source_missing_key if record.get("touched")]
+    touched_unknown_kind = [record for record in source_info["unknown_kind"] if record.get("touched")]
     disallowed_touched_unmatched = [
         record
         for record in touched_unmatched
@@ -826,26 +912,31 @@ def validate_preflight(source_info, target_preview_info, preset_id):
         problems.append("ALLOW_DESTRUCTIVE_MIGRATION is False")
     if not os.path.exists(APKG_PATH):
         problems.append(f"APKG_PATH does not exist: {APKG_PATH}")
-    if deck_ids_under(IMPORTED_ROOT):
+    if IMPORTED_ROOT != OLD_ROOT and deck_ids_under(IMPORTED_ROOT):
         problems.append(f"Imported root already exists before migration: {IMPORTED_ROOT}")
-    if OLD_ROOT == IMPORTED_ROOT:
-        problems.append("OLD_ROOT and IMPORTED_ROOT must differ")
-    if source_info["unknown_kind"]:
-        problems.append(f"Source cards with unknown kind: {len(source_info['unknown_kind'])}")
-    if source_info["unknown_scope"]:
-        problems.append(f"Source cards with unknown scope: {len(source_info['unknown_scope'])}")
+    if touched_unknown_kind:
+        problems.append(f"Touched source cards with unknown kind: {len(touched_unknown_kind)}")
     if target_preview_info["unknown_kind"]:
         problems.append(f"Target preview cards with unknown kind: {len(target_preview_info['unknown_kind'])}")
-    if target_preview_info["unknown_scope"]:
-        problems.append(f"Target preview cards with unknown scope: {len(target_preview_info['unknown_scope'])}")
-    if source_duplicates:
-        problems.append(f"Duplicate source keys: {len(source_duplicates)}")
+    if unresolved_source_duplicates:
+        problems.append(
+            f"Duplicate source keys with conflicting learned state: {len(unresolved_source_duplicates)}"
+        )
     if target_duplicates:
         problems.append(f"Duplicate target preview keys: {len(target_duplicates)}")
-    if source_missing_key:
-        problems.append(f"Source cards without key: {len(source_missing_key)}")
+    if touched_missing_key:
+        problems.append(f"Touched source cards without key: {len(touched_missing_key)}")
     if target_missing_key:
         problems.append(f"Target preview cards without key: {len(target_missing_key)}")
+    target_missing_note_id_field = [
+        record
+        for record in target_preview_records
+        if not (record.get("fields", {}).get("NoteID", "") or "").strip()
+    ]
+    if target_missing_note_id_field:
+        problems.append(
+            f"Target preview cards without NoteID field: {len(target_missing_note_id_field)}"
+        )
     for mid, source_note_ids in sorted(source_note_ids_by_notetype.items()):
         total_notes_for_notetype = int(
             mw.col.db.scalar("select count(*) from notes where mid = ?", mid) or 0
@@ -874,12 +965,13 @@ def validate_preflight(source_info, target_preview_info, preset_id):
         )
 
     return {
-        "source_by_key": source_by_key,
+        "source_by_key": touched_source_by_key,
         "target_preview_by_key": target_by_key,
         "match_plan": match_plan,
         "unmatched_source": unmatched_source,
-        "target_only": target_only,
         "touched_unmatched": touched_unmatched,
+        "resolved_source_duplicates": resolved_source_duplicates,
+        "unresolved_source_duplicates": unresolved_source_duplicates,
         "target_preset_id": preset_id,
         "problems": problems,
     }
@@ -901,16 +993,23 @@ try:
     preflight = validate_preflight(source_info, target_preview_info, target_preset_id)
 
     source_records = source_info["records"]
+    learned_source_records = list(preflight["source_by_key"].values())
     source_notetypes = source_notetypes_from_records(source_records)
     source_by_key = preflight["source_by_key"]
-    touched_source = [record for record in source_records if record["touched"]]
-    suspended_source = [record for record in source_records if record["suspended"]]
+    touched_source = learned_source_records
     touched_unmatched = preflight["touched_unmatched"]
-    source_snapshot = snapshot_source_state(source_records)
+    source_snapshot = snapshot_source_state(touched_source)
     old_card_ids = [record["card"]["id"] for record in source_records]
 
     if preflight["problems"]:
-        raise Exception("Preflight failed:\n" + "\n".join(preflight["problems"]))
+        preflight_report = {
+            "problems": preflight["problems"],
+            "resolved_source_duplicate_keys": len(preflight["resolved_source_duplicates"]),
+            "unresolved_source_duplicate_keys": len(preflight["unresolved_source_duplicates"]),
+            "resolved_source_duplicate_samples": preflight["resolved_source_duplicates"][:20],
+            "unresolved_source_duplicate_samples": preflight["unresolved_source_duplicates"][:10],
+        }
+        raise Exception("Preflight failed:\n" + build_report_json(preflight_report))
 
     mw.progress.start(label="Deleting old Xiehanzi root deck...", immediate=True)
     try:
@@ -932,7 +1031,7 @@ try:
             {
                 name.split("::")[0]
                 for _, name in all_decks_from_mw()
-                if "New HSK (2025)" in name
+                if name.startswith(IMPORTED_ROOT)
             }
         )
         if len(roots) != 1:
@@ -944,15 +1043,15 @@ try:
     target_info = collect_current_records(imported_root)
     target_records = target_info["records"]
     target_by_key, target_duplicates, target_missing_key = index_by_key(target_records)
+    target_card_ids = [record["card"]["id"] for record in target_records]
 
     if target_duplicates:
         raise Exception(f"Duplicate target keys after import: {len(target_duplicates)}")
     if target_missing_key:
         raise Exception(f"Target cards without key after import: {len(target_missing_key)}")
-    if target_info["unknown_kind"] or target_info["unknown_scope"]:
+    if target_info["unknown_kind"]:
         raise Exception(
-            f"Unknown target kind/scope after import: "
-            f"{len(target_info['unknown_kind'])}/{len(target_info['unknown_scope'])}"
+            f"Unknown target kind after import: {len(target_info['unknown_kind'])}"
         )
 
     match_plan = build_match_plan(source_by_key, target_by_key)
@@ -960,11 +1059,11 @@ try:
     matched_source_keys = match_plan["matched_source_keys"]
     matched_target_keys = set(match_plan["matched_target_keys"])
     touched_matched_source_keys = [
-        key for key in matched_source_keys if source_snapshot[key]["touched"]
+        key for key in matched_source_keys if key in source_snapshot
     ]
-    suspended_matched_source_keys = [
-        key for key in matched_source_keys if source_snapshot[key]["suspended"]
-    ]
+    touched_matched_target_keys = {
+        matches_by_source_key[key]["target_key"] for key in touched_matched_source_keys
+    }
 
     copy_columns = [col for col in SCHEDULE_COPY_COLUMNS if col in table_columns("cards")]
     now = int(time.time())
@@ -975,21 +1074,26 @@ try:
     try:
         full_state_copied = 0
         revlog_rows_inserted = 0
-        suspended_set = 0
+        default_suspended_set = 0
 
-        for source_key in matched_source_keys:
+        # Imported cards must start with no review log. If Anki reuses card IDs
+        # from deleted cards, stale revlog rows can otherwise attach to the new
+        # cards and make fresh/suspended cards look reviewed.
+        if target_card_ids:
+            mw.col.db.execute(
+                f"delete from revlog where cid in {ids2str_local(target_card_ids)}"
+            )
+            default_suspended_set = suspend_target_cards(target_card_ids, now)
+
+        for source_key in touched_matched_source_keys:
             source_item = source_snapshot[source_key]
             target_key = matches_by_source_key[source_key]["target_key"]
             target_card_id = target_by_key[target_key]["card"]["id"]
 
-            if source_item["touched"]:
-                copy_full_card_state(source_item["card"], target_card_id, copy_columns, now)
-                next_revlog_id = insert_revlog_rows(source_item["revlog"], target_card_id, next_revlog_id)
-                full_state_copied += 1
-                revlog_rows_inserted += len(source_item["revlog"])
-            elif source_item["suspended"]:
-                suspend_target_card(target_card_id, now)
-                suspended_set += 1
+            copy_full_card_state(source_item["card"], target_card_id, copy_columns, now)
+            next_revlog_id = insert_revlog_rows(source_item["revlog"], target_card_id, next_revlog_id)
+            full_state_copied += 1
+            revlog_rows_inserted += len(source_item["revlog"])
 
         preset_changed_decks = set_deck_preset_for_tree(imported_root, target_preset_id)
 
@@ -1030,7 +1134,7 @@ try:
 
     schedule_mismatches = []
     revlog_mismatches = []
-    suspended_mismatches = []
+    default_suspended_mismatches = []
 
     final_match_plan = build_match_plan(source_by_key, final_by_key)
     final_matches_by_source_key = final_match_plan["matches_by_source_key"]
@@ -1066,17 +1170,15 @@ try:
                 "actual": target_revlog_count,
             })
 
-    for source_key in suspended_matched_source_keys:
-        final_match = final_matches_by_source_key.get(source_key)
-        target_record = final_by_key.get(final_match["target_key"]) if final_match else None
-        if not target_record:
-            suspended_mismatches.append({"key": source_key, "reason": "missing final target"})
+    for target_key, target_record in final_by_key.items():
+        if target_key in touched_matched_target_keys:
             continue
         target_card = card_row(target_record["card"]["id"])
         if int(target_card["queue"]) != -1:
-            suspended_mismatches.append({
-                "key": source_key,
+            default_suspended_mismatches.append({
+                "key": target_key,
                 "queue": target_card["queue"],
+                "summary": card_summary(target_record),
             })
 
     preset_counts = Counter(
@@ -1097,7 +1199,7 @@ try:
         )
         or 0
     )
-    final_target_only_keys = final_match_plan["target_only_keys"]
+    default_only_target_keys = final_match_plan["target_only_keys"]
     skipped_touched_kind_counts = Counter(record.get("kind") for record in touched_unmatched)
     loose_match_samples = []
     for source_key in sorted(final_match_plan["loose_source_keys"])[:20]:
@@ -1116,8 +1218,15 @@ try:
         verify_problems.append(f"Schedule mismatches: {len(schedule_mismatches)}")
     if revlog_mismatches:
         verify_problems.append(f"Revlog mismatches: {len(revlog_mismatches)}")
-    if suspended_mismatches:
-        verify_problems.append(f"Suspended mismatches: {len(suspended_mismatches)}")
+    if final_revlog_on_final_cards != revlog_rows_inserted:
+        verify_problems.append(
+            "Final revlog row total unexpected: "
+            f"{final_revlog_on_final_cards} final rows vs {revlog_rows_inserted} inserted rows"
+        )
+    if default_suspended_mismatches:
+        verify_problems.append(
+            f"Default-suspended fresh card mismatches: {len(default_suspended_mismatches)}"
+        )
     if orphaned_revlog_rows:
         verify_problems.append(f"Orphaned revlog rows still present: {orphaned_revlog_rows}")
     if preset_counts != Counter({target_preset_id: len(deck_ids_under(FINAL_ROOT))}):
@@ -1143,27 +1252,29 @@ try:
         "import_result": import_result,
         "source": {
             "cards": len(source_records),
+            "learned_keyed_cards": len(learned_source_records),
             "kind_counts": summarize_kind_counts(source_records),
+            "build_id_counts": summarize_build_id_counts(source_records),
             "touched_cards": len(touched_source),
-            "suspended_cards": len(suspended_source),
             "revlog_rows_total_for_touched": sum(record["revlog_count"] for record in touched_source),
         },
         "match": {
-            "matched_cards": len(matched_source_keys),
-            "exact_matched_cards": len(match_plan["exact_source_keys"]),
-            "loose_matched_cards": len(match_plan["loose_source_keys"]),
-            "target_only_cards": len(final_target_only_keys),
+            "matched_learned_cards": len(matched_source_keys),
+            "exact_matched_learned_cards": len(match_plan["exact_source_keys"]),
+            "loose_matched_learned_cards": len(match_plan["loose_source_keys"]),
+            "resolved_source_duplicate_keys": len(preflight["resolved_source_duplicates"]),
+            "default_only_target_cards": len(default_only_target_keys),
             "touched_matched_cards": len(touched_matched_source_keys),
             "touched_skipped_cards": len(touched_unmatched),
             "touched_skipped_kind_counts": dict(
                 sorted(skipped_touched_kind_counts.items(), key=lambda item: str(item[0]))
             ),
-            "suspended_matched_cards": len(suspended_matched_source_keys),
+            "default_suspended_target_cards": default_suspended_set,
         },
         "apply": {
             "full_state_copied": full_state_copied,
             "old_notetypes_removed": len(notetype_cleanup["removed"]),
-            "suspend_only_set": suspended_set,
+            "default_suspended_set": default_suspended_set,
             "revlog_rows_inserted": revlog_rows_inserted,
             "skipped_touched_revlog_rows": skipped_touched_revlog_rows,
             "preset_changed_decks": len(preset_changed_decks),
@@ -1171,6 +1282,7 @@ try:
         "final": {
             "cards": len(final_records),
             "kind_counts": summarize_kind_counts(final_records),
+            "build_id_counts": summarize_build_id_counts(final_records),
             "hanzi_notetype_names": final_hanzi_notetype_names,
             "queue_counts": dict(sorted(queue_counts.items())),
             "revlog_rows_on_final_cards": final_revlog_on_final_cards,
@@ -1182,14 +1294,14 @@ try:
                 card_summary(record) for record in touched_unmatched[:20]
             ],
             "old_notetypes_removed": notetype_cleanup["removed"],
-            "loose_matches": loose_match_samples,
-            "target_only": [
-                card_summary(final_by_key[key])
-                for key in final_target_only_keys[:20]
+            "resolved_source_duplicates": preflight["resolved_source_duplicates"][:20],
+            "resolved_source_duplicate_keys": [
+                item["key"] for item in preflight["resolved_source_duplicates"][:100]
             ],
+            "loose_matches": loose_match_samples,
             "schedule_mismatches": schedule_mismatches[:20],
             "revlog_mismatches": revlog_mismatches[:20],
-            "suspended_mismatches": suspended_mismatches[:20],
+            "default_suspended_mismatches": default_suspended_mismatches[:20],
         },
         "verify_problems": verify_problems,
         "collection_mod_before": collection_mod_before,
@@ -1197,28 +1309,31 @@ try:
     }
 
     status = (
-        "HANZI STATEFUL MIGRATION APPLIED"
+        "HANZI STATEFUL MIGRATION APPLIED: all learned card states transferred successfully"
         if not verify_problems
-        else "HANZI STATEFUL MIGRATION NEEDS ATTENTION"
+        else "HANZI STATEFUL MIGRATION NEEDS ATTENTION: state transfer verification failed"
     )
     lines = [
         status,
         f"final root: {FINAL_ROOT}",
-        f"matched cards: {len(matched_source_keys)}",
+        f"matched learned cards: {len(matched_source_keys)}",
         f"loose matches: {len(match_plan['loose_source_keys'])}",
+        f"resolved duplicate source keys: {len(preflight['resolved_source_duplicates'])}",
         f"full states copied: {full_state_copied}",
         f"old hanzi notetypes removed: {len(notetype_cleanup['removed'])}",
-        f"suspend-only cards set: {suspended_set}",
+        f"default-suspended target cards set: {default_suspended_set}",
         f"revlog rows inserted: {revlog_rows_inserted}",
         f"touched cards skipped intentionally: {len(touched_unmatched)}",
         f"skipped revlog rows: {skipped_touched_revlog_rows}",
-        f"target-only fresh cards: {len(final_target_only_keys)}",
+        f"default-only target cards: {len(default_only_target_keys)}",
         f"final queue counts: {dict(sorted(queue_counts.items()))}",
         f"deck preset set: {TARGET_PRESET_NAME} / {target_preset_id}",
     ]
     if verify_problems:
         lines.append("verify problems:")
         lines.extend(f"  {problem}" for problem in verify_problems)
+    else:
+        lines.append("state verification: all learned schedules/revlogs, default suspension, presets, and note types verified")
     lines.append("Full JSON copied to clipboard")
     report = "\n".join(lines) + "\n\n" + build_report_json(report_data)
 
