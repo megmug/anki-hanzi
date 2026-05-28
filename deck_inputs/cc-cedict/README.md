@@ -1,11 +1,8 @@
 # CC-CEDICT Snapshot
 
-This directory contains the pinned CC-CEDICT source snapshot used by the local
-deck build.
+This directory contains the pinned CC-CEDICT source snapshot used by the local deck build.
 
-The upstream MDBG export URL is mutable, so the build vendors the exact
-CC-CEDICT text file needed for reproducible APKG generation instead of
-downloading the latest file during `nix-build`.
+The upstream MDBG export URL is mutable, so the build vendors the exact CC-CEDICT text file needed for reproducible APKG generation instead of downloading the latest file during `nix-build`.
 
 To update the snapshot from the latest upstream export, run:
 
@@ -13,10 +10,8 @@ To update the snapshot from the latest upstream export, run:
 nix-shell --run "python scripts/update_cc_cedict_snapshot.py"
 ```
 
-The update command downloads the current archive from the URL below, validates
-it, extracts `cedict_ts.u8`, and rewrites this directory. Then rebuild
-and commit the changed snapshot, manifest, and reports if the new data is
-intentional.
+The update command downloads the current archive from the URL below, validates it, extracts `cedict_ts.u8`, and rewrites this directory.
+Then rebuild and commit the changed snapshot, manifest, and reports if the new data is intentional.
 
 - Source URL: `https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.zip`
 - Snapshot date from file header: `2026-05-27T08:03:59Z`
