@@ -129,7 +129,7 @@ let
     inherit yarnOfflineCache;
 
     nativeBuildInputs = with pkgs; [
-      nodejs_20
+      nodejs_22
       yarnConfigHook
       pythonEnv
       pkg-config
