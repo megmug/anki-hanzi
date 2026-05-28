@@ -8,10 +8,8 @@
       "hsk:4",
       "hsk:5",
       "hsk:6",
-      "hsk:7-9"
-    ],
-    "individual_simplified": [
-      "英语"
+      "hsk:7-9",
+      "freq:top10000"
     ]
   },
   "card_types": [
