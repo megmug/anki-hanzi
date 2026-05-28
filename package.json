@@ -7,6 +7,6 @@
     "hanzi-writer-data": "2.0.1"
   },
   "engines": {
-    "node": ">=22.0"
+    "node": ">=24.0"
   }
 }
