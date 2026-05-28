@@ -24,6 +24,7 @@ DEFAULT_SNAPSHOT_MANIFEST = Path("deck_inputs/cc-cedict/snapshot.json")
 DEFAULT_OUTPUT = Path("master_db_output/cc_cedict_master.json")
 
 LINE_RE = re.compile(r"^(?P<traditional>\S+)\s+(?P<simplified>\S+)\s+\[(?P<pinyin>.+?)\]\s+/(?P<definitions>.*)/$")
+MISSING_IDEOGRAPH_PLACEHOLDERS = frozenset({"□"})
 
 
 def sha256_file(path: Path) -> str:
@@ -42,6 +43,10 @@ def parse_pinyin(value: str) -> str:
 
 def split_definitions(definitions_blob: str) -> list[str]:
     return [part.strip() for part in definitions_blob.split("/") if part.strip()]
+
+
+def has_missing_ideograph_placeholder(value: str) -> bool:
+    return any(char in MISSING_IDEOGRAPH_PLACEHOLDERS for char in value or "")
 
 
 def build_lexical_words(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -98,10 +103,11 @@ def append_definitions(target: list[str], entry: dict[str, Any]) -> None:
         seen.add(definition)
 
 
-def parse_cedict_text(text: str) -> tuple[list[str], list[dict[str, Any]], int]:
+def parse_cedict_text(text: str) -> tuple[list[str], list[dict[str, Any]], int, int]:
     comments: list[str] = []
     entries: list[dict[str, Any]] = []
     rejected_count = 0
+    skipped_placeholder_count = 0
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -120,6 +126,9 @@ def parse_cedict_text(text: str) -> tuple[list[str], list[dict[str, Any]], int]:
         pinyin = parse_pinyin(match.group("pinyin"))
         traditional = match.group("traditional")
         simplified = match.group("simplified")
+        if has_missing_ideograph_placeholder(traditional) or has_missing_ideograph_placeholder(simplified):
+            skipped_placeholder_count += 1
+            continue
 
         entries.append(
             {
@@ -131,7 +140,7 @@ def parse_cedict_text(text: str) -> tuple[list[str], list[dict[str, Any]], int]:
             }
         )
 
-    return comments, entries, rejected_count
+    return comments, entries, rejected_count, skipped_placeholder_count
 
 
 def load_snapshot_manifest(path: Path) -> dict[str, Any]:
@@ -164,7 +173,7 @@ def build_database(source_file: Path, url: str, expected_sha256: str, output_pat
         )
 
     text = source_file.read_text(encoding="utf-8-sig")
-    comments, entries, rejected_count = parse_cedict_text(text)
+    comments, entries, rejected_count, skipped_placeholder_count = parse_cedict_text(text)
     words = build_lexical_words(entries)
     forms_count = sum(len(word["forms"]) for word in words)
 
@@ -183,6 +192,7 @@ def build_database(source_file: Path, url: str, expected_sha256: str, output_pat
             "forms": forms_count,
             "comments": len(comments),
             "rejected_lines": rejected_count,
+            "skipped_missing_ideograph_placeholder_entries": skipped_placeholder_count,
             "words_with_multiple_forms": sum(1 for word in words if len(word["forms"]) > 1),
             "max_forms_per_word": max((len(word["forms"]) for word in words), default=0),
         },
