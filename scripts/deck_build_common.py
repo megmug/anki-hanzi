@@ -18,12 +18,10 @@ DECK_ROOT = "汉字 (Hànzì)"
 OUTPUT_APKG = Path("anki-hanzi.apkg")
 DECK_INPUTS_DIR = Path("deck_inputs")
 CARD_TEMPLATES_DIR = DECK_INPUTS_DIR / "card_templates"
-AUDIO_DIR = DECK_INPUTS_DIR / "hsk-3.0-words-list/New HSK (2025)/Audio"
 EXTRA_AUDIO_DIR = DECK_INPUTS_DIR / "extra_audio"
 HANZI_WRITER_PACKAGE_JSON = Path("node_modules/hanzi-writer/package.json")
 HANZI_WRITER_BUNDLE = Path("node_modules/hanzi-writer/dist/hanzi-writer.min.js")
 HANZI_WRITER_DATA_DIR = Path("node_modules/hanzi-writer-data")
-VOICE = "zh-CN-XiaoxiaoNeural"
 
 LEVELS = ["1", "2", "3", "4", "5", "6", "7-9"]
 CARD_TYPES = ["Meaning", "Pinyin", "Write"]
@@ -36,24 +34,6 @@ FIELDS = [
     {"name": "NoteID"},
     {"name": "BuildID"},
 ]
-
-TEMPLATE_FILES = {
-    "Meaning": (CARD_TEMPLATES_DIR / "meaning/front.html", CARD_TEMPLATES_DIR / "meaning/back.html"),
-    "Pinyin": (CARD_TEMPLATES_DIR / "pinyin/front.html", CARD_TEMPLATES_DIR / "pinyin/back.html"),
-    "Write": (CARD_TEMPLATES_DIR / "write/front.html", CARD_TEMPLATES_DIR / "write/back.html"),
-}
-
-STATIC_MEDIA = [
-    str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff"),
-    str(CARD_TEMPLATES_DIR / "fonts/_MaterialIcons-Regular.woff2"),
-    str(CARD_TEMPLATES_DIR / "files/_pleco.png"),
-    str(CARD_TEMPLATES_DIR / "files/_youdao.png"),
-    str(CARD_TEMPLATES_DIR / "files/_rtega.png"),
-    str(CARD_TEMPLATES_DIR / "files/_tatoeba.png"),
-    str(CARD_TEMPLATES_DIR / "files/_hanzicraft.png"),
-    str(CARD_TEMPLATES_DIR / "files/_characterpop.svg"),
-]
-
 
 DEFAULT_CONFIG_PATH = DECK_INPUTS_DIR / "deck_config.json"
 TAG_NAMESPACE = "hanzi"
@@ -78,7 +58,7 @@ AUDIO_FILENAME_MALE = "cmn-{simplified}_m.mp3"
 
 @dataclass(frozen=True)
 class AudioConfig:
-    engine: str = "kokoro"  # "kokoro" or "edge_tts"
+    engine: str = "off"  # "kokoro", "edge_tts", or "off"
 
 
 DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
@@ -194,7 +174,14 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
         return DeckConfig()
 
     raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("deck config must be an object")
+    defaults = DeckConfig()
     selection = raw.get("selection", {})
+    if selection is None:
+        selection = {}
+    if not isinstance(selection, dict):
+        raise ValueError("deck config selection must be an object")
 
     individual_simplified: frozenset[str] = frozenset()
     raw_individual = selection.get("individual_simplified", [])
@@ -211,18 +198,10 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
     else:
         tags = ()
 
-    audio_raw = raw.get("audio")
-    if audio_raw is None:
-        audio = AudioConfig(engine="off")
-    else:
-        audio = AudioConfig(
-            engine=str(audio_raw.get("engine", AudioConfig.engine)),
-        )
-
     return DeckConfig(
-        card_types=tuple(raw.get("card_types", CARD_TYPES)),
-        audio=audio,
-        card_settings=merge_card_settings(raw.get("card_settings")),
+        card_types=merge_card_types(raw.get("card_types"), defaults.card_types),
+        audio=merge_audio_config(raw.get("audio"), defaults.audio),
+        card_settings=merge_card_settings(raw.get("card_settings"), defaults.card_settings),
         mode=str(selection.get("mode", "")),
         tags=tags,
         individual_simplified=individual_simplified,
@@ -265,6 +244,47 @@ def parse_float(value: Any, field_name: str, minimum: float, maximum: float) -> 
     return parsed
 
 
+SUPPORTED_AUDIO_ENGINES = {"off", "kokoro", "edge_tts"}
+
+
+def normalize_audio_engine(value: Any, field_name: str) -> str:
+    engine = str(value or "").strip().casefold().replace("-", "_")
+    if engine not in SUPPORTED_AUDIO_ENGINES:
+        raise ValueError(
+            f"deck config {field_name} must be one of: "
+            f"{', '.join(sorted(SUPPORTED_AUDIO_ENGINES))}"
+        )
+    return engine
+
+
+def merge_audio_config(raw: Any, default: AudioConfig) -> AudioConfig:
+    if raw is None:
+        return default
+    if not isinstance(raw, dict):
+        raise ValueError("deck config audio must be an object")
+
+    unknown_keys = sorted(set(raw) - {"engine"})
+    if unknown_keys:
+        raise ValueError(f"deck config audio has unknown setting: {', '.join(unknown_keys)}")
+
+    return AudioConfig(
+        engine=normalize_audio_engine(raw.get("engine", default.engine), "audio.engine"),
+    )
+
+
+def merge_card_types(raw: Any, default: tuple[str, ...]) -> tuple[str, ...]:
+    if raw is None:
+        return default
+    if not isinstance(raw, list):
+        raise ValueError("deck config card_types must be a list")
+
+    card_types = tuple(str(card_type) for card_type in raw)
+    unknown_card_types = sorted(set(card_types) - set(CARD_TYPES))
+    if unknown_card_types:
+        raise ValueError(f"deck config card_types has unknown card type: {', '.join(unknown_card_types)}")
+    return card_types
+
+
 def normalize_card_setting(value: Any, field_name: str) -> Any:
     if field_name.endswith(".grid_size"):
         return parse_int(value, field_name, 100, 1000)
@@ -279,8 +299,11 @@ def normalize_card_setting(value: Any, field_name: str) -> Any:
     return parse_bool(value, field_name)
 
 
-def merge_card_settings(raw: Any) -> dict[str, dict[str, dict[str, Any]]]:
-    settings = default_card_settings()
+def merge_card_settings(
+    raw: Any,
+    default: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    settings = deepcopy(default) if default is not None else default_card_settings()
     if raw is None:
         return settings
     if not isinstance(raw, dict):
@@ -482,18 +505,6 @@ def create_deck(
             )
         )
     return deck
-
-
-def remove_zero_length_audio_files() -> list[str]:
-    removed: list[str] = []
-    for folder in (AUDIO_DIR, EXTRA_AUDIO_DIR):
-        if not folder.exists():
-            continue
-        for path in folder.glob("*.mp3"):
-            if path.stat().st_size == 0:
-                path.unlink()
-                removed.append(str(path))
-    return removed
 
 
 def remove_failed_audio_output(path: Path) -> None:

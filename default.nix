@@ -59,7 +59,6 @@ let
   pythonBase = pkgs.python312;
 
   pythonEnv = pythonBase.withPackages (ps: with ps; [
-    ipykernel
     colorize-pinyin
     pinyin-tone-converter
     dragonmapper
@@ -96,18 +95,12 @@ let
         base = baseNameOf path;
         isUnder = dir: rel == dir || pkgs.lib.hasPrefix (dir + "/") rel;
         excludedDirs = [
+          ".agents"
+          ".codex"
           ".git"
-          ".docusaurus"
           ".npm-cache"
           ".yarn-cache"
-          "_complete-hsk-vocabulary"
-          "anki-xie-hanzi-2.2.1-to-2.3-migrator"
-          "build"
-          "build_reports"
-          "complete-hsk-vocabulary"
           "node_modules"
-          "source_comparison_output"
-          "test"
         ];
         isMasterDbGenerated = pkgs.lib.hasPrefix "master_db_output/" rel;
         isGeneratedFile =

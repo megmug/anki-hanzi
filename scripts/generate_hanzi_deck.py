@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import edge_tts
 import genanki
 
 import deck_build_common as common

@@ -80,29 +80,6 @@
   background-color: #1f1f1f;
 }
 
-/* Kai Ti Fonts */
-/*
-@font-face {
-    font-family: 'AR PL KaitiM Big5';
-    src: url('_ZenKai-Medium.ttf') format('ttf'),
-        url('_ZenKai-Medium.woff2') format('woff2'),
-        url('_ZenKai-Medium.woff') format('woff');
-    font-weight: 500;
-    font-style: normal;
-    font-display: swap;
-}
-
-@font-face {
-    font-family: 'AR PL KaitiM GB';
-    src: url('_GBZenKai-Medium.ttf') format('ttf'),
-        url('_GBZenKai-Medium.woff2') format('woff2'),
-        url('_GBZenKai-Medium.woff') format('woff');
-    font-weight: 500;
-    font-style: normal;
-    font-display: swap;
-}
-*/
-
 .char-card {
   font-size: 3em;
 }
@@ -126,12 +103,9 @@
   font-family: "Material Icons";
   font-style: normal;
   font-weight: 300;
-  src: url(MaterialIcons-Regular.eot);
-  /* For IE6-8 */
   src: local("Material Icons"), local("MaterialIcons-Regular"),
     url(_MaterialIcons-Regular.woff2) format("woff2"),
-    url(_MaterialIcons-Regular.woff) format("woff"),
-    url(https://fonts.gstatic.com/s/materialicons/v141/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2) format('woff2');
+    url(_MaterialIcons-Regular.woff) format("woff");
 }
 
 .material-icons {
