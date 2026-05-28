@@ -8,6 +8,22 @@
     {
       "simplified": "兡",
       "reason": "Kokoro Chinese G2P cannot detect pinyin final"
+    },
+    {
+      "simplified": "瓧",
+      "reason": "Kokoro Chinese G2P cannot detect pinyin final"
+    },
+    {
+      "simplified": "瓰",
+      "reason": "Kokoro Chinese G2P cannot detect pinyin final"
+    },
+    {
+      "simplified": "瓱",
+      "reason": "Kokoro Chinese G2P cannot detect pinyin final"
+    },
+    {
+      "simplified": "瓼",
+      "reason": "Kokoro Chinese G2P cannot detect pinyin final"
     }
   ]
 }
