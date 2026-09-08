@@ -23,16 +23,21 @@
  *   - **shot at 2× and kept at 2×.** The gallery draws these ~450px wide on a
  *     retina screen, so anything smaller than ~1000px arrives soft.
  *
- * Output: `static/img/decks/`, listed by `src/lib/deckPreviews.ts`.
+ * Output: `static/img/decks/`, plus a copy of the shots named in `SHOP_TILES`
+ * into `static/img/shop/`, where `/shop` looks for a product's picture
+ * (`image` in `static/data/shop.json`). A product whose shot has not been taken
+ * falls back to a generated tile, so the grid is never broken by a missing file
+ * — running this is what upgrades it to the real card.
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const outDir = join(root, 'static', 'img', 'decks');
+const shopDir = join(root, 'static', 'img', 'shop');
 const workDir = join(root, 'dist-decks', 'card-shots');
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -66,7 +71,32 @@ const SETS = {
 			name,
 			deck: `Anki xiehanzi::HSK 1::${name}`
 		}))
+	},
+	// The radical deck is keyed on its own field: its notes have no `Simplified`.
+	//   npm run build:radical-deck   → dist-decks/Anki-xiehanzi-Kangxi-Radicals.apkg
+	// then import that into the open profile.
+	radicals: {
+		prefix: 'radicals',
+		field: 'Radical',
+		word: '\u6c34',
+		types: ['Recognize', 'Write'].map((name) => ({
+			name,
+			deck: `Anki xiehanzi::Kangxi Radicals::${name}`
+		}))
 	}
+};
+
+/**
+ * Which shot becomes which product's picture on `/shop`. Keys are product ids
+ * in `static/data/shop.json`; values are shot names (`<prefix>-<type>-<side>`).
+ *
+ * The answer side is the tile, not the question: a front is one glyph on white,
+ * which sells nothing. Products with no deck to shoot — the cloze deck, the
+ * printables — are absent on purpose and keep the generated tile.
+ */
+const SHOP_TILES = {
+	'hsk-word-decks': 'premium-recognition-back',
+	'kangxi-radicals': 'radicals-recognize-back'
 };
 
 const args = {};
@@ -132,15 +162,19 @@ function cropTail(png, out) {
 rmSync(workDir, { recursive: true, force: true });
 mkdirSync(workDir, { recursive: true });
 mkdirSync(outDir, { recursive: true });
+mkdirSync(shopDir, { recursive: true });
 
 for (const key of sets) {
 	const set = SETS[key];
 	if (!set) throw new Error(`unknown set ${key} — try ${Object.keys(SETS).join(', ')}`);
 
+	const setField = set.field ?? 'Simplified';
+	const setWord = typeof args.word === 'string' ? word : (set.word ?? word);
+
 	for (const type of set.types) {
-		const ids = await anki('findCards', { query: `deck:"${type.deck}" Simplified:${word}` });
+		const ids = await anki('findCards', { query: `deck:"${type.deck}" ${setField}:${setWord}` });
 		if (!ids.length) {
-			console.warn(`skip ${key}/${type.name}: no card for ${word} — is "${type.deck}" imported?`);
+			console.warn(`skip ${key}/${type.name}: no card for ${setWord} — is "${type.deck}" imported?`);
 			continue;
 		}
 		const [card] = await anki('cardsInfo', { cards: [ids[0]] });
@@ -164,9 +198,11 @@ for (const key of sets) {
 				`file://${src}`
 			]);
 			cropTail(png, join(outDir, `${name}.jpg`));
-			console.log(`${name}`);
+			const product = Object.keys(SHOP_TILES).find((id) => SHOP_TILES[id] === name);
+			if (product) copyFileSync(join(outDir, `${name}.jpg`), join(shopDir, `${product}.jpg`));
+			console.log(`${name}${product ? ` → shop/${product}.jpg` : ''}`);
 		}
 	}
 }
 
-console.log(`\nshots → static/img/decks/`);
+console.log(`\nshots → static/img/decks/  ·  shop tiles → static/img/shop/`);

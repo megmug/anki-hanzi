@@ -15,7 +15,9 @@
 
 	let { children } = $props();
 	const repo = 'https://github.com/krmanik/Anki-xiehanzi';
-	const shop = 'https://www.patreon.com/cw/krmani/shop';
+	// The shop is a page on this site now (`/shop`); Patreon is the checkout
+	// behind each product, reached from there.
+	const shop = `${base}/shop`;
 
 	// Kept in sync with .github/FUNDING.yml
 	const sponsorLinks = [
@@ -100,9 +102,11 @@
 			{/each}
 			<a
 				href={shop}
-				target="_blank"
-				rel="noopener noreferrer"
-				class="ml-1 flex items-center gap-1.5 rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-wider text-neutral-500 transition hover:text-neutral-900"
+				class="ml-1 flex items-center gap-1.5 rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition {isActive(
+					shop
+				)
+					? 'bg-neutral-900 text-white'
+					: 'text-neutral-500 hover:text-neutral-900'}"
 			>
 				<ShoppingBag size={14} /> Shop
 			</a>
@@ -199,10 +203,12 @@
 
 				<a
 					href={shop}
-					target="_blank"
-					rel="noopener noreferrer"
 					onclick={() => (open = false)}
-					class="flex items-center gap-2 rounded-md px-2 py-2.5 font-mono text-sm uppercase tracking-wider text-neutral-600"
+					class="flex items-center gap-2 rounded-md px-2 py-2.5 font-mono text-sm uppercase tracking-wider {isActive(
+						shop
+					)
+						? 'text-indigo-600'
+						: 'text-neutral-600'}"
 				>
 					<ShoppingBag size={16} /> Shop
 				</a>
@@ -275,7 +281,7 @@
 			<h3 class="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-neutral-400">Resources</h3>
 			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="{base}/docs">Docs</a>
 			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="{base}/hsk">HSK word lists</a>
-			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="{base}/hsk#decks">Prebuilt decks</a>
+			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="{base}/hsk">Prebuilt decks</a>
 			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="{base}/tools">Tools</a>
 		</div>
 		<div>
@@ -286,12 +292,7 @@
 		<div>
 			<h3 class="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-neutral-400">More</h3>
 			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="{base}/create">Create</a>
-			<a
-				class="block py-1 text-sm text-neutral-600 hover:text-neutral-900"
-				href={shop}
-				target="_blank"
-				rel="noopener noreferrer">Shop</a
-			>
+			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href={shop}>Shop</a>
 			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href={repo}>GitHub</a>
 		</div>
 	</div>
