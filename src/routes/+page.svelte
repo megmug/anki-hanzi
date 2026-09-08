@@ -42,7 +42,7 @@
 	];
 
 	const cards = [
-		{ title: 'Import', icon: Download, link: `${base}/hsk#decks`, description: 'Download ready-made HSK 3.0 decks for Anki.' },
+		{ title: 'Import', icon: Download, link: `${base}/hsk`, description: 'Download ready-made HSK 3.0 decks for Anki.' },
 		{ title: 'Create', icon: SquarePen, link: `${base}/create`, description: 'Build custom xiehanzi decks from your own words.' },
 		{ title: 'Look up', icon: BookOpen, link: `${base}/dictionary`, description: 'Search any word or character — strokes, parts, origin.' },
 		{ title: 'Guide', icon: Book, link: `${base}/docs`, description: 'See features and how to customize the decks.' }
@@ -75,7 +75,7 @@
 				Create a deck <ArrowRight size={16} />
 			</a>
 			<a
-				href="{base}/hsk#decks"
+				href="{base}/hsk"
 				class="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm font-medium text-neutral-800 transition hover:border-neutral-900"
 				>Download decks</a
 			>

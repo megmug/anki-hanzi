@@ -287,7 +287,7 @@
 		<div>
 			<h3 class="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-neutral-400">Community</h3>
 			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="https://forums.ankiweb.net/">Anki Forums</a>
-			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="https://discord.gg/qjzcRTx">Discord</a>
+			<a class="block py-1 text-sm text-neutral-600 hover:text-neutral-900" href="https://discord.gg/A3HGPw9UuA">Discord</a>
 		</div>
 		<div>
 			<h3 class="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-neutral-400">More</h3>
