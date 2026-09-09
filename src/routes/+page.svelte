@@ -11,6 +11,7 @@
 	import Book from '@lucide/svelte/icons/book';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import ShoppingBag from '@lucide/svelte/icons/shopping-bag';
 
 	const repo = 'https://github.com/krmanik/Anki-xiehanzi';
 
@@ -79,6 +80,16 @@
 				class="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm font-medium text-neutral-800 transition hover:border-neutral-900"
 				>Download decks</a
 			>
+			<!-- The shop is the only paid thing on the site and the homepage said
+			     nothing about it. It is the accented button, not the primary one:
+			     the free deck creator is still the way in, but a reader should not
+			     have to open the nav to learn a premium edition exists. -->
+			<a
+				href="{base}/shop"
+				class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-2.5 text-sm font-medium text-indigo-700 transition hover:border-indigo-600 hover:bg-indigo-100"
+			>
+				<ShoppingBag size={16} /> Premium decks
+			</a>
 		</div>
 	</div>
 </header>
