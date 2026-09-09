@@ -223,7 +223,7 @@
 			glosses from CC-CEDICT, glyph images from
 			<a class="underline" href="https://www.zdic.net/">漢典 zdic.net</a>. Stroke order by
 			<a class="underline" href="https://hanziwriter.org/">Hanzi Writer</a>. Want them as flashcards?
-			<a class="underline" href="{base}/hsk#decks">See the decks</a>.
+			<a class="underline" href="{base}/hsk">See the decks</a>.
 		</p>
 	{/if}
 </section>
