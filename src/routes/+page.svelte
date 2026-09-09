@@ -20,17 +20,18 @@
 	onMount(async () => {
 		const HanziWriter = (await import('hanzi-writer')).default;
 		const xiehanzi = ['写', '汉', '字'];
-		for (const hanzi of xiehanzi) {
+		const strokeColors = ['#4caf50', '#2196f3', '#4caf50'];
+		xiehanzi.forEach((hanzi, i) => {
 			const target = document.createElement('div');
 			logoEl.appendChild(target);
 			const writer = HanziWriter.create(target, hanzi, {
 				width: 72,
 				height: 72,
 				padding: 4,
-				strokeColor: hanzi == '写' ? '#4f46e5' : '#171717'
+				strokeColor: strokeColors[i]
 			});
 			writer.loopCharacterAnimation();
-		}
+		});
 	});
 
 	const features = [
@@ -55,41 +56,61 @@
 </svelte:head>
 
 <!-- hero -->
-<header class="border-b border-neutral-200">
-	<div class="mx-auto max-w-3xl px-5 py-20 text-center">
-		<div bind:this={logoEl} class="flex justify-center gap-2"></div>
-		<p class="mt-6 font-mono text-xs uppercase tracking-[0.3em] text-neutral-400">
-			Mandarin · Anki · open source
-		</p>
-		<h1 class="mt-3 text-4xl font-extrabold tracking-tight text-neutral-900 sm:text-5xl">
-			Learn to <span class="text-indigo-600">write</span> Chinese.
-		</h1>
-		<p class="mx-auto mt-4 max-w-xl text-lg text-neutral-600">
-			Read, write and practice Mandarin by drawing strokes in Anki — with pinyin, zhuyin, audio and
-			rich dictionary meanings.
-		</p>
-		<div class="mt-8 flex flex-wrap justify-center gap-3">
-			<a
-				href="{base}/create"
-				class="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-700"
+<header class="overflow-hidden border-b border-neutral-200">
+	<div
+		class="mx-auto grid max-w-6xl items-center gap-10 px-5 py-16 lg:grid-cols-[1.1fr_1fr] lg:gap-6 lg:py-20"
+	>
+		<div class="text-center lg:text-left">
+			<div bind:this={logoEl} class="flex justify-center gap-2 lg:justify-start"></div>
+			<p
+				class="mt-6 font-mono text-xs uppercase tracking-[0.3em] text-neutral-400 lg:justify-start"
 			>
-				Create a deck <ArrowRight size={16} />
-			</a>
-			<a
-				href="{base}/hsk"
-				class="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm font-medium text-neutral-800 transition hover:border-neutral-900"
-				>Download decks</a
-			>
-			<!-- The shop is the only paid thing on the site and the homepage said
-			     nothing about it. It is the accented button, not the primary one:
-			     the free deck creator is still the way in, but a reader should not
-			     have to open the nav to learn a premium edition exists. -->
-			<a
-				href="{base}/shop"
-				class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-2.5 text-sm font-medium text-indigo-700 transition hover:border-indigo-600 hover:bg-indigo-100"
-			>
-				<ShoppingBag size={16} /> Premium decks
-			</a>
+				Mandarin · Anki · open source
+			</p>
+			<h1 class="mt-3 text-4xl font-extrabold tracking-tight text-neutral-900 sm:text-5xl">
+				Learn to <span class="text-indigo-600">write</span> Chinese.
+			</h1>
+			<p class="mx-auto mt-4 max-w-xl text-lg text-neutral-600 lg:mx-0">
+				Read, write and practice Mandarin by drawing strokes in Anki — with pinyin, zhuyin, audio and
+				rich dictionary meanings.
+			</p>
+			<div class="mt-8 flex flex-wrap justify-center gap-3 lg:justify-start">
+				<a
+					href="{base}/create"
+					class="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-700"
+				>
+					Create a deck <ArrowRight size={16} />
+				</a>
+				<a
+					href="{base}/hsk"
+					class="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm font-medium text-neutral-800 transition hover:border-neutral-900"
+					>Download decks</a
+				>
+				<!-- The shop is the only paid thing on the site and the homepage said
+				     nothing about it. It is the accented button, not the primary one:
+				     the free deck creator is still the way in, but a reader should not
+				     have to open the nav to learn a premium edition exists. -->
+				<a
+					href="{base}/shop"
+					class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-2.5 text-sm font-medium text-indigo-700 transition hover:border-indigo-600 hover:bg-indigo-100"
+				>
+					<ShoppingBag size={16} /> Premium decks
+				</a>
+			</div>
+		</div>
+
+		<!-- app screenshots — same height, mobile shot layered on top, right-aligned -->
+		<div class="relative mx-auto w-fit lg:mx-0">
+			<img
+				src="{base}/img/shop/hsk-word-decks.jpg"
+				alt="Browsing the HSK word decks in Anki"
+				class="h-64 w-auto rounded-lg border border-neutral-200 bg-white shadow-md sm:h-72 lg:h-80"
+			/>
+			<img
+				src="{base}/img/ankimobile0.PNG"
+				alt="A word card in the Anki xiehanzi deck, open in AnkiMobile"
+				class="absolute top-1/2 right-0 h-72 w-auto -translate-y-1/2 rounded-lg border-2 border-neutral-300 bg-white shadow-md sm:h-80 lg:h-[22rem]"
+			/>
 		</div>
 	</div>
 </header>

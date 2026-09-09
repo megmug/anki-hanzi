@@ -85,7 +85,7 @@
 	<nav class="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
 		<a href="{base}/" class="flex items-center gap-2 font-bold tracking-tight text-neutral-900">
 			<img src="{base}/img/logo.gif" alt="" class="h-7 w-7" />
-			<span>Anki<span class="text-indigo-600">xiehanzi</span></span>
+			<span>Anki <span class="text-indigo-600">xiehanzi</span></span>
 		</a>
 
 		<!-- desktop -->
@@ -271,7 +271,7 @@
 		<div class="sm:col-span-2 md:col-span-1">
 			<div class="flex items-center gap-2 font-bold tracking-tight">
 				<img src="{base}/img/logo.gif" alt="" class="h-6 w-6" />
-				Anki<span class="text-indigo-600">xiehanzi</span>
+				Anki <span class="text-indigo-600">xiehanzi</span>
 			</div>
 			<p class="mt-2 max-w-xs text-sm text-neutral-500">
 				Learn, read and write Mandarin by drawing strokes in Anki.
