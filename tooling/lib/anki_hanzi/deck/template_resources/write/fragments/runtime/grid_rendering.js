@@ -17,24 +17,7 @@
       return;
     }
     drawGrid.innerHTML = "";
-    drawGrid.style = "";
-    var size = 40;
-    if (finish) {
-      size = 100;
-      drawGrid.style.position = "unset";
-      drawGrid.style.display = "flex";
-      drawGrid.style.justifyContent = "center";
-      drawGrid.style.flexWrap = "nowrap";
-      drawGrid.style.overflow = "auto";
-    } else {
-      var half = (parseInt(charWidth, 10) || 200) / 2;
-      drawGrid.style.position = "absolute";
-      drawGrid.style.left = "0";
-      drawGrid.style.width = "calc(50% - " + half + "px)";
-      drawGrid.style.display = "flex";
-      drawGrid.style.flexDirection = "column";
-      drawGrid.style.alignItems = "flex-end";
-    }
+    var size = finish ? 72 : 32;
 
     for (var i = 0; i < characters.length; i++) {
       var hanzi = characters[i];
@@ -42,7 +25,6 @@
       if (isHanzi(hanzi)) {
         span.innerHTML = grid_data;
         span.children[0].id = "onfinish-grid-background-target" + i;
-        span.children[0].style.margin = finish ? "6px" : "2px";
         span.style.display = style;
         drawGrid.appendChild(span);
         setStrokeColor(i);
@@ -61,7 +43,6 @@
         span.style.display = style;
         span.style.fontSize = size + "px";
         span.style.lineHeight = size + "px";
-        span.style.margin = finish ? "6px" : "2px";
         span.style.verticalAlign = "middle";
         span.textContent = hanzi;
         drawGrid.appendChild(span);

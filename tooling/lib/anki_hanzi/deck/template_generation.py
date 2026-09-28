@@ -204,72 +204,70 @@ def validate_composed_template(
         raise ValueError("Composed Write template is missing required runtime parts: " + ", ".join(missing_parts))
 
 
-def render_meaning_front_template(config: DeckConfig) -> str:
-    return inject_card_settings(
-        """<div class="header">
-  Name one <span class="question-sub-text">meaning</span>.
-</div>
+def render_icon(name: str) -> str:
+    return f'<span class="material-symbols-outlined" aria-hidden="true">{name}</span>'
 
-<br />
 
-<div id="char_pinyin">{{Pinyin}}</div>
-<div id="char_sim" class="char-card">{{Simplified}}</div>
-
-<script>
-  window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
-
-  (function () {
-    var settings =
-      (window.HANZI_CARD_SETTINGS && window.HANZI_CARD_SETTINGS.front) || {};
-
-    function showHide(selector, isShow, style) {
-      document.querySelectorAll(selector).forEach(function (element) {
-        element.style.display = isShow ? style || "inline" : "none";
-      });
-    }
-
-    showHide("#char_pinyin", settings.show_pinyin);
-    showHide("#char_meaning", settings.show_meaning, "block");
-    showHide("#char_sim", settings.show_simplified, "block");
-    showHide(".pinyin", settings.show_pinyin);
-    showHide("#char-sim-id", settings.show_simplified);
-  })();
-</script>
-""",
-        "Meaning",
-        config,
+def render_tool_button(button_id: str, icon: str, label: str, *, hidden: bool = False) -> str:
+    style = ' style="display: none"' if hidden else ""
+    return (
+        f'<button type="button" class="card-tool tappable" id="{button_id}"'
+        f' title="{label}" aria-label="{label}"{style}>{render_icon(icon)}</button>'
     )
 
 
-def render_pinyin_front_template(config: DeckConfig) -> str:
-    return inject_card_settings(
-        """<div class="header">
-  Name a valid <span class="question-sub-text">pinyin reading</span>.
+def render_card_shell(card_type: str, content: str, *, front: bool = False) -> str:
+    icon, question = {
+        "Meaning": ("translate", "Name one meaning"),
+        "Pinyin": ("record_voice_over", "Name a valid pinyin reading"),
+        "Write": ("edit", "Write the character"),
+    }[card_type]
+    # Only Writer opts out of AnkiMobile's tap zones. Native answer controls stay available.
+    tap_class = " tappable" if card_type == "Write" else ""
+    side = "front" if front else "back"
+    return f"""<div class="hanzi-screen{tap_class}">
+<div class="hanzi-card hanzi-{card_type.lower()} hanzi-{side}">
+  <header class="card-heading">
+    <div class="card-type">{render_icon(icon)}<span>{card_type}</span></div>
+    <div class="card-question">{question}</div>
+  </header>
+  {content}
 </div>
+</div>"""
 
-<br />
 
-<div id="char_sim" class="char-card">{{Simplified}}</div>
+def render_card_prompt(*, show_pinyin: bool = True) -> str:
+    pinyin = '<div id="char_pinyin">{{Pinyin}}</div>' if show_pinyin else ""
+    return f'<div class="card-prompt">{pinyin}<div id="char_sim" class="char-card">{{{{Simplified}}}}</div></div>'
 
+
+def render_meaning_panel() -> str:
+    return (
+        '<div id="char_meaning" class="meaning-card tappable" tabindex="0" aria-label="Definitions">{{Meaning}}</div>'
+    )
+
+
+def render_basic_front_template(card_type: str, config: DeckConfig) -> str:
+    prompt = render_card_prompt(show_pinyin=card_type == "Meaning")
+    template = (
+        render_card_shell(
+            card_type,
+            f'<div class="study-layout"><div class="study-workspace">{prompt}</div></div>',
+            front=True,
+        )
+        + """
 <script>
   window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
-
-  (function () {
-    var frontSettings =
-      (window.HANZI_CARD_SETTINGS && window.HANZI_CARD_SETTINGS.front) || {};
-
-    function showHide(selector, isShow, style) {
-      document.querySelectorAll(selector).forEach(function (element) {
-        element.style.display = isShow ? style || "inline" : "none";
-      });
-    }
-
-    showHide("#char_sim", frontSettings.show_simplified, "block");
-    showHide(".pinyin", false);
-  })();
+  /* __SHARED_VISIBILITY__ */
+  var settings = window.HANZI_CARD_SETTINGS.front || {};
+  showHide("#char_pinyin", settings.show_pinyin, "block");
+  showHide("#char_sim", settings.show_simplified, "block");
 </script>
-""",
-        "Pinyin",
+"""
+    )
+    return inject_card_settings(
+        render_shared_js_markers(common.TEMPLATE_RESOURCES_DIR, template),
+        card_type,
         config,
     )
 
@@ -395,34 +393,41 @@ def render_write_front_fragment(resource_dir: Path, fragment_path: str) -> str:
 
 def render_write_front_template(resource_dir: Path) -> str:
     template = read_text(resource_dir / WRITE_FRONT_TEMPLATE_RESOURCE_PATH)
+    tools = "\n".join(
+        (
+            render_tool_button("btnHintStroke", "lightbulb", "Hint: next stroke"),
+            render_tool_button("btnRevealChar", "gesture", "Show character", hidden=True),
+            render_tool_button("btnGoNextCard", "navigate_next", "Next character", hidden=True),
+            render_tool_button("btnPlayAudio", "volume_up", "Play audio"),
+            render_tool_button("btnMoreOptions", "more_horiz", "Dictionary links"),
+        )
+    )
+    for marker, fragment in (
+        ("<!-- __WRITE_PROMPT__ -->", render_card_prompt()),
+        ("<!-- __WRITE_TOOLS__ -->", tools),
+        ("<!-- __WRITE_DEFINITIONS__ -->", render_meaning_panel()),
+    ):
+        template = replace_unique_template_marker(template, marker, fragment, marker)
     for marker, fragment_path, label in WRITE_FRONT_FRAGMENT_SPECS:
         fragment = render_write_front_fragment(resource_dir, fragment_path).removesuffix("\n")
         template = replace_unique_template_marker(template, marker, fragment, label)
-    return template
+    return render_card_shell("Write", template, front=True)
 
 
 def render_basic_back_template(card_type: str, config: DeckConfig) -> str:
-    template = """<div id="char_pinyin">{{Pinyin}}</div>
-<div id="char_sim" class="char-card">{{Simplified}}</div>
-<div id="audio" style="display: none">{{Audio}}</div>
-
-<div class="modal-footer1">
-  <a class="btn" id="btnPlayAudio">
-    <div class="icon">
-      <span class="material-symbols-outlined">play_arrow</span>
-    </div>
-  </a>
-  <a class="btn" id="btnMoreOptions" onclick="openSidebar('more-info-sidebar')">
-    <div class="icon">
-      <span class="material-symbols-outlined">more_vert</span>
-    </div>
-  </a>
+    tools = render_tool_button("btnPlayAudio", "volume_up", "Play audio")
+    tools += render_tool_button("btnMoreOptions", "more_horiz", "Dictionary links")
+    content = f"""<div class="study-layout">
+  <div class="study-workspace">
+    {render_card_prompt()}
+    <div class="card-tools tappable">{tools}</div>
+  </div>
+  {render_meaning_panel()}
 </div>
-
-<hr />
-
-<div id="char_meaning" class="meaning-card">{{Meaning}}</div>
-
+<div id="audio" style="display: none">{{{{Audio}}}}</div>"""
+    template = (
+        render_card_shell(card_type, content)
+        + """
 <script>
   window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
 
@@ -435,7 +440,7 @@ def render_basic_back_template(card_type: str, config: DeckConfig) -> str:
   function applyCardSettings() {
     var settings =
       (window.HANZI_CARD_SETTINGS && window.HANZI_CARD_SETTINGS.back) || {};
-    showHide("#char_pinyin", settings.show_pinyin);
+    showHide("#char_pinyin", settings.show_pinyin, "block");
     showHide("#char_meaning", settings.show_meaning, "block");
     showHide("#char_sim", settings.show_simplified, "block");
     showHide(".pinyin", settings.show_pinyin);
@@ -447,7 +452,9 @@ def render_basic_back_template(card_type: str, config: DeckConfig) -> str:
   setupAudioButton();
   applyCardSettings();
 </script>
-""" + render_more_info_sidebar()
+"""
+        + render_more_info_sidebar()
+    )
     return inject_card_settings(
         render_shared_js_markers(common.TEMPLATE_RESOURCES_DIR, template),
         card_type,
@@ -465,10 +472,7 @@ class BasicCardTemplateRenderer:
     card_type: str
 
     def render(self, config: DeckConfig, hw_data_bundle: Path | None = None) -> CardTemplateSpec:
-        front = {
-            "Meaning": render_meaning_front_template,
-            "Pinyin": render_pinyin_front_template,
-        }[self.card_type](config)
+        front = render_basic_front_template(self.card_type, config)
         return CardTemplateSpec(
             name=f"Card 1 - {self.card_type}",
             qfmt=front,

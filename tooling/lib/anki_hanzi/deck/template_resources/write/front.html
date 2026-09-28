@@ -1,13 +1,15 @@
-<div class="header">
-  Write the <span class="question-sub-text">character</span>.
-</div>
-
-<br />
-
-<div id="char_pinyin">{{Pinyin}}</div>
-<div id="char_sim" class="char-card">{{Simplified}}</div>
-<div id="onfinish-character-target-div" class="tappable"></div>
-<div id="xh-writer-practice-wrap">
+<div class="study-layout writer-layout">
+  <div class="study-workspace">
+    <!-- __WRITE_PROMPT__ -->
+    <div id="onfinish-character-target-div" class="tappable"></div>
+    <div id="xh-writer-practice-wrap">
+      <div class="writer-canvas-space">
+        <div id="character-target-div" class="tappable"></div>
+        <div id="ch_load_status" role="status" aria-label="Character loading" style="display: none">&#8226;</div>
+      </div>
+    </div>
+  </div>
+  <!-- __WRITE_DEFINITIONS__ -->
   <div id="xh-score-panel" class="xh-score-redacted" aria-live="polite">
     <div class="xh-score-main xh-score-result-row">
       <span class="xh-score-label">Score</span>
@@ -30,68 +32,15 @@
       <span id="xh-score-assists">0</span>
     </div>
   </div>
-  <div id="character-target-div" class="tappable"></div>
-</div>
-<div
-  id="ch_load_status"
-  style="color: #ea2322; margin-top: -36px; display: none"
->
-  &#8226;
+  <div class="card-tools tappable">
+    <!-- __WRITE_TOOLS__ -->
+  </div>
 </div>
 <div id="audio" style="display: none">{{Audio}}</div>
 
-<style>
-  #btnMoreOptions {
-    display: none;
-  }
-
-  #back #btnMoreOptions {
-    display: inline-block;
-  }
-
-  #back #btnHintStroke {
-    display: none;
-  }
-</style>
-
-<div class="modal-footer1">
-  <a class="btn" id="btnPlayAudio">
-    <div class="icon">
-      <span class="material-symbols-outlined">play_arrow</span>
-    </div>
-  </a>
-  <a class="btn" id="btnHintStroke" title="Hint" aria-label="Hint">
-    <div class="icon">
-      <span class="material-symbols-outlined">lightbulb</span>
-    </div>
-  </a>
-  <a class="btn" id="btnRevealChar" style="display: none">
-    <div class="icon">
-      <span class="material-symbols-outlined">gesture</span>
-    </div>
-  </a>
-  <a class="btn" id="btnGoNextCard" style="display: none">
-    <div class="icon">
-      <span class="material-symbols-outlined">navigate_next</span>
-    </div>
-  </a>
-  <a class="btn" id="btnMoreOptions" onclick="openSidebar('more-info-sidebar')">
-    <div class="icon">
-      <span class="material-symbols-outlined">more_vert</span>
-    </div>
-  </a>
-</div>
-
-<hr />
-
-<div id="char_meaning" class="meaning-card">{{Meaning}}</div>
-
 <!-- __MORE_INFO_SIDEBAR__ -->
 <!-- __WRITE_PERSISTENCE_SCRIPT__ -->
-
 <!-- __WRITE_SETTINGS_SCRIPT__ -->
 <!-- __WRITE_HANZI_WRITER_LOADER__ -->
-
 <!-- __WRITE_PINYIN_WRAPPER_SCRIPT__ -->
-
 <!-- __WRITE_RUNTIME_SCRIPT__ -->

@@ -4,22 +4,9 @@
       configured = 400;
     }
 
-    var viewportWidth = 0;
-    if (window.visualViewport && window.visualViewport.width) {
-      viewportWidth = window.visualViewport.width;
-    }
-    if (document.documentElement && document.documentElement.clientWidth) {
-      viewportWidth = viewportWidth
-        ? Math.min(viewportWidth, document.documentElement.clientWidth)
-        : document.documentElement.clientWidth;
-    }
-    if (window.innerWidth) {
-      viewportWidth = viewportWidth
-        ? Math.min(viewportWidth, window.innerWidth)
-        : window.innerWidth;
-    }
-
-    var available = Math.floor(viewportWidth - 32);
+    var space = document.querySelector(".writer-canvas-space");
+    var bounds = space.getBoundingClientRect();
+    var available = Math.floor(Math.min(bounds.width, bounds.height));
     if (!isFinite(available) || available <= 0) {
       return configured;
     }
@@ -33,6 +20,43 @@
   var charHW = getWriterSize(configuredCharHW);
   var charHeight = charHW;
   var charWidth = charHW;
+  function setWriterSurfaceSize(size) {
+    var target = document.getElementById("character-target-div");
+    target.style.width = target.style.height = size + "px";
+  }
+  setWriterSurfaceSize(charHW);
+  if (window.hanziWriterResizeObserver) {
+    window.hanziWriterResizeObserver.disconnect();
+  }
+
+  function observeWriterSize(writers) {
+    if (typeof ResizeObserver === "undefined") return;
+    var space = document.querySelector(".writer-canvas-space");
+    var targets = document.getElementById("character-target-div");
+    var observer = new ResizeObserver(function () {
+      if (!space.isConnected) {
+        observer.disconnect();
+        return;
+      }
+      if (!space.clientHeight) return;
+      var size = getWriterSize(configuredCharHW);
+      if (size === charHW) return;
+      charHW = charWidth = charHeight = size;
+      setWriterSurfaceSize(size);
+      // Resize existing writers so rotating the screen preserves the active quiz.
+      writers.forEach(function (writer, index) {
+        if (writer) {
+          writer.updateDimensions({ width: size, height: size });
+        } else if (targets.children[index]) {
+          var target = targets.children[index];
+          target.style.width = target.style.height = size + "px";
+          target.style.fontSize = target.style.lineHeight = size + "px";
+        }
+      });
+    });
+    observer.observe(space);
+    window.hanziWriterResizeObserver = observer;
+  }
   var configuredStrokeWidth = Number(WRITE_SETTINGS.stroke_width);
   if (!isFinite(configuredStrokeWidth) || configuredStrokeWidth <= 0) {
     configuredStrokeWidth = 64;

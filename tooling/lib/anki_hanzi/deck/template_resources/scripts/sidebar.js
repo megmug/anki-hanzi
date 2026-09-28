@@ -1,7 +1,7 @@
   function openSidebar(id) {
     var sidebar = document.getElementById(id);
     if (sidebar) {
-      sidebar.style.width = "160px";
+      sidebar.style.width = "min(300px, 90vw)";
     }
   }
 

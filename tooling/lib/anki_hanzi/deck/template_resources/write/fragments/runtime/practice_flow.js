@@ -56,6 +56,7 @@
               strokeColor: stroke_color,
               outlineColor: outline_color,
               drawingColor: drawing_color,
+              strokeHighlightSpeed: 0.5,
               showHintAfterMisses: strokeAfterMisses,
               leniency: strokeLeniency,
               acceptBackwardsStrokes: false,
@@ -80,6 +81,8 @@
         }
       })(i);
     }
+
+    observeWriterSize(hanziWriterList);
 
     var revealClickCount = 0;
     var goNextButton = document.getElementById("btnGoNextCard");
@@ -208,7 +211,7 @@
     var characterElements = characterDiv.children;
     var len = characterElements.length;
 
-    for (i = 0; i < len; i++) {
+    for (var i = 0; i < len; i++) {
       var style = characterElements[i].style.display;
       if (style === "block" || style === "") {
         characterElements[i].style.display = "none";
@@ -232,6 +235,7 @@
       if (window.xhActiveQuizScore) {
         window.xhActiveQuizScore.markComplete();
       }
+      document.querySelector(".hanzi-card").classList.add("writer-complete");
     }
 
     showHide("#btnHintStroke", false);
@@ -245,8 +249,8 @@
   }
 
   function showNextAndRevealBtn(show) {
-    showHide("#btnGoNextCard", show);
-    showHide("#btnRevealChar", show);
+    showHide("#btnGoNextCard", show, "inline-flex");
+    showHide("#btnRevealChar", show, "inline-flex");
   }
 
   doPractice();

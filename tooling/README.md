@@ -55,3 +55,22 @@ These modules are imported by build programs and are not direct entry points.
 - `lib/anki_hanzi/paths.py`: shared paths to committed project inputs.
 - `lib/anki_hanzi/rendering/meaning_html.py`: render hanzi-style Meaning HTML from structured word and form data.
 - `lib/anki_hanzi/audio/`: provider-neutral audio generation plus Kokoro and edge-tts backends.
+
+## Card Layout
+
+All three card types share the shell, prompts, touch controls, and responsive styling in
+`lib/anki_hanzi/deck/template_generation.py` and `lib/anki_hanzi/deck/template_resources/`. Definitions scroll independently
+beside the practice area on wider screens and below it on phones. Card data and note identities
+are independent of this layout.
+
+On wider screens, Write cards reserve 60% of the layout for practice, score, and controls;
+definitions occupy the remaining 40%. On phones, definitions, score, and controls sit below
+the writing area in that order.
+Writer Pinyin appears only in the definitions panel, with the separate prompt retained as a
+fallback when definitions are hidden by configuration.
+
+The entire Write card surface is `tappable`, opting out of AnkiMobile's tap-to-answer gestures.
+Use Anki's native **Show Answer** control (keep the bottom bar enabled on AnkiMobile).
+The template does not emulate a tap zone or grade a card. Other card types retain their normal
+tap behaviour. Hint targets are larger, with a slower stroke animation. Resizing the Writer
+updates existing instances without starting the quiz again.
