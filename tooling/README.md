@@ -80,3 +80,7 @@ disposing them when Anki replaces the card or leaves the reviewer. The Writer ad
 `write/fragments/runtime/managed_writer.js` also releases quizzes and animations when
 practice writers or thumbnails are replaced. It adapts private hooks of the pinned
 Hanzi Writer 3.7.3, which has no public disposal API; recheck these hooks on library upgrades.
+
+Card height follows the visible viewport, including a top offset from the reviewer. Changes
+to the viewport or loaded fonts update this height without waiting for a scroll. Pinch zoom
+does not trigger a layout resize.

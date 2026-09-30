@@ -52,13 +52,13 @@
 }
 
 #qa { margin: 0; padding: 0; }
-.hanzi-screen { min-height: 100vh; min-height: 100dvh; }
+.hanzi-screen { min-height: 100vh; min-height: var(--hanzi-viewport-height, 100dvh); }
 .hanzi-screen *, .more-info-sidebar * { box-sizing: border-box; }
 .hanzi-card {
   --card-accent: var(--meaning-accent);
   max-width: 1200px;
   height: 100vh;
-  height: 100dvh;
+  height: var(--hanzi-viewport-height, 100dvh);
   min-height: 420px;
   margin: 0 auto;
   padding: 16px 24px;

@@ -56,4 +56,37 @@
   removalObserver.observe(document.body, { childList: true, subtree: true });
   onCleanup(function () { removalObserver.disconnect(); });
   listen(window, "pagehide", dispose);
+
+  function updateViewport() {
+    if (!isActive()) return;
+    var viewport = window.visualViewport;
+    // Pinch zoom should magnify the card, not cause it to reflow continuously.
+    if (viewport && viewport.scale !== 1) return;
+    var height = viewport ? Math.min(window.innerHeight, viewport.height) : window.innerHeight;
+    var top = Math.max(0, screen.getBoundingClientRect().top + window.scrollY);
+    var available = Math.floor(height - top);
+    if (available > 0) screen.style.setProperty("--hanzi-viewport-height", available + "px");
+  }
+
+  var viewportFrame = null;
+  function scheduleViewport() {
+    if (viewportFrame !== null) return;
+    viewportFrame = requestAnimationFrame(function () {
+      viewportFrame = null;
+      updateViewport();
+    });
+  }
+  onCleanup(function () {
+    if (viewportFrame !== null) cancelAnimationFrame(viewportFrame);
+  });
+  listen(window, "resize", scheduleViewport);
+  if (window.visualViewport) {
+    listen(window.visualViewport, "resize", scheduleViewport);
+    listen(window.visualViewport, "scroll", scheduleViewport);
+  }
+  updateViewport();
+  scheduleViewport();
+  if (document.fonts) document.fonts.ready.then(function () {
+    if (isActive()) scheduleViewport();
+  });
 })();
