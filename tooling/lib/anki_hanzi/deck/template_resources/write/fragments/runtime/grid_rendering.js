@@ -16,6 +16,7 @@
     if (!drawGrid) {
       return;
     }
+    disposeWriters(thumbnailWriters);
     drawGrid.innerHTML = "";
     var size = finish ? 72 : 32;
 
@@ -28,7 +29,7 @@
         span.style.display = style;
         drawGrid.appendChild(span);
         setStrokeColor(i);
-        var writer = HanziWriter.create(
+        var writer = createCardWriter(
           "onfinish-grid-background-target" + i,
           hanzi,
           {
@@ -39,6 +40,7 @@
             charDataLoader: bundleCharDataLoader,
           },
         );
+        thumbnailWriters.push(writer);
       } else {
         span.style.display = style;
         span.style.fontSize = size + "px";

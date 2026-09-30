@@ -74,3 +74,9 @@ Use Anki's native **Show Answer** control (keep the bottom bar enabled on AnkiMo
 The template does not emulate a tap zone or grade a card. Other card types retain their normal
 tap behaviour. Hint targets are larger, with a slower stroke animation. Resizing the Writer
 updates existing instances without starting the quiz again.
+
+`scripts/card_lifecycle.js` owns each card's global listeners and delayed callbacks,
+disposing them when Anki replaces the card or leaves the reviewer. The Writer adapter in
+`write/fragments/runtime/managed_writer.js` also releases quizzes and animations when
+practice writers or thumbnails are replaced. It adapts private hooks of the pinned
+Hanzi Writer 3.7.3, which has no public disposal API; recheck these hooks on library upgrades.

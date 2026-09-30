@@ -25,16 +25,15 @@
     target.style.width = target.style.height = size + "px";
   }
   setWriterSurfaceSize(charHW);
-  if (window.hanziWriterResizeObserver) {
-    window.hanziWriterResizeObserver.disconnect();
-  }
+  var writerResizeObserver;
 
   function observeWriterSize(writers) {
     if (typeof ResizeObserver === "undefined") return;
+    if (writerResizeObserver) writerResizeObserver.disconnect();
     var space = document.querySelector(".writer-canvas-space");
     var targets = document.getElementById("character-target-div");
     var observer = new ResizeObserver(function () {
-      if (!space.isConnected) {
+      if (!cardRuntime.isActive()) {
         observer.disconnect();
         return;
       }
@@ -55,7 +54,8 @@
       });
     });
     observer.observe(space);
-    window.hanziWriterResizeObserver = observer;
+    writerResizeObserver = observer;
+    cardRuntime.onCleanup(function () { observer.disconnect(); });
   }
   var configuredStrokeWidth = Number(WRITE_SETTINGS.stroke_width);
   if (!isFinite(configuredStrokeWidth) || configuredStrokeWidth <= 0) {

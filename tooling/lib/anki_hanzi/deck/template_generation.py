@@ -102,6 +102,11 @@ WRITE_FRONT_FRAGMENT_SPECS = (
 )
 WRITE_RUNTIME_FRAGMENT_SPECS = (
     (
+        "  /* __WRITE_RUNTIME_MANAGED_WRITER__ */",
+        "write/fragments/runtime/managed_writer.js",
+        "write managed writer lifecycle",
+    ),
+    (
         "  /* __WRITE_RUNTIME_SIZING__ */",
         "write/fragments/runtime/sizing.js",
         "write runtime sizing",
@@ -175,7 +180,7 @@ WRITE_REQUIRED_QFMT_SNIPPETS = (
     ("shared audio button setup", "function setupAudioButton()"),
     ("shared visibility helper", "function showHide(selector, isShow, style)"),
     ("shared sidebar helper", "function openSidebar(id)"),
-    ("Hanzi Writer instance creation", "HanziWriter.create("),
+    ("Hanzi Writer instance creation", "new CardHanziWriter("),
     ("writer practice function", "function doPractice("),
     ("writer practice startup", "doPractice();"),
 )
@@ -231,6 +236,7 @@ def render_card_shell(card_type: str, content: str, *, front: bool = False) -> s
     <div class="card-type">{render_icon(icon)}<span>{card_type}</span></div>
     <div class="card-question">{question}</div>
   </header>
+  {render_script_tag(read_text(common.TEMPLATE_RESOURCES_DIR / "scripts/card_lifecycle.js"))}
   {content}
 </div>
 </div>"""

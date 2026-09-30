@@ -12,7 +12,7 @@
     }
   }
 
-  document.addEventListener("click", function (event) {
+  window.hanziCardRuntime.listen(document, "click", function (event) {
     var moreInfoSidebar = document.getElementById("more-info-sidebar");
     var moreInfoButton = document.getElementById("btnMoreOptions");
     if (!moreInfoSidebar || !moreInfoButton) {

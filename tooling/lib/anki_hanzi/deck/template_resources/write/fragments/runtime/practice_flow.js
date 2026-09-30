@@ -1,4 +1,5 @@
   function doPractice(p = false) {
+    disposeWriters(practiceWriters);
     if (document.getElementById("back")) {
       restoreQuizScoreDisplay();
       generateHanziOnFinishQuiz("unset", true);
@@ -14,7 +15,7 @@
     document.getElementById("ch_load_status").style.marginBottom = "0px";
     document.getElementById("ch_load_status").style.display = "block";
 
-    var hanziWriterList = [];
+    var hanziWriterList = practiceWriters;
     var quizScore = createQuizScoreTracker(characters.length);
     window.xhActiveQuizScore = quizScore;
     var drawGrid = document.getElementById("character-target-div");
@@ -31,16 +32,18 @@
           div.children[0].id = "grid-background-target" + characterIndex;
           drawGrid.appendChild(div);
           setStrokeColor(characterIndex);
-          var writer = HanziWriter.create(
+          var writer = createCardWriter(
             "grid-background-target" + characterIndex,
             hanzi,
             {
               onLoadCharDataSuccess: function (data) {
+                if (!cardRuntime.isActive()) return;
                 document.getElementById("ch_load_status").style.color =
                   "#4caf50";
                 quizScore.setTotalStrokes(characterIndex, data.strokes.length);
               },
               onLoadCharDataError: function (reason) {
+                if (!cardRuntime.isActive()) return;
                 document.getElementById("ch_load_status").style.color =
                   "#ea2322";
                 console.error("HanziWriter data missing for:", hanzi, reason);
@@ -95,10 +98,10 @@
           quizScore.markAssist();
           writer.showOutline();
           writer.showCharacter();
-          setTimeout(function () {
+          cardRuntime.timeout(function () {
             onFinishQuizDrawHanzi();
           }, 800);
-          setTimeout(function () {
+          cardRuntime.timeout(function () {
             showNextHanzi();
           }, 1000);
         } else {
@@ -170,7 +173,7 @@
           onFinishQuizDrawHanzi();
           revealClickCount = 0;
 
-          setTimeout(function () {
+          cardRuntime.timeout(function () {
             showNextHanzi();
           }, 1000);
         },
@@ -229,6 +232,7 @@
     }
 
     if (i + 1 == len) {
+      disposeWriters(practiceWriters);
       document.querySelector("#character-target-div").innerHTML = "";
       document.getElementById("ch_load_status").style.display = "none";
       generateHanziOnFinishQuiz("unset", true);

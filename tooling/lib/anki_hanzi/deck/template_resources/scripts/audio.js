@@ -13,11 +13,12 @@
   }
 
   function playAudio() {
+    var runtime = window.hanziCardRuntime;
     var audioElements = collectAudioElements();
     if (audioElements.length === 0) return;
 
     function playNext(index) {
-      if (index >= audioElements.length) return;
+      if (!runtime.isActive() || index >= audioElements.length) return;
       var el = audioElements[index];
       if (el.tagName === "AUDIO") {
         el.onended = function () {
@@ -27,7 +28,7 @@
       } else {
         el.click();
         // Anki <a> sound links have no onended event; chain with a fixed delay
-        setTimeout(function () {
+        runtime.timeout(function () {
           playNext(index + 1);
         }, 1500);
       }
