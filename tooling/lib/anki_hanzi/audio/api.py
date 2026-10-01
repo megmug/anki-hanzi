@@ -73,5 +73,4 @@ class AudioBackend(Protocol):
 
 
 def remove_failed_audio_output(path: Path) -> None:
-    if path.exists() and path.stat().st_size == 0:
-        path.unlink()
+    path.unlink(missing_ok=True)

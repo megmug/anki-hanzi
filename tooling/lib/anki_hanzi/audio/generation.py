@@ -206,6 +206,8 @@ class AudioGenerator:
 
             try:
                 self.backend.synthesize(job)
+                if not job.output_path.is_file() or job.output_path.stat().st_size == 0:
+                    raise RuntimeError(f"{self.backend.engine} produced no audio data")
                 generated.append(str(job.output_path))
             except Exception as exc:
                 remove_failed_audio_output(job.output_path)
