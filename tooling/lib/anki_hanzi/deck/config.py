@@ -117,9 +117,6 @@ class DeckConfig:
 def load_deck_config(path: Path | None = None) -> DeckConfig:
     if path is None:
         path = DEFAULT_DECK_CONFIG
-    if not path.exists():
-        return DeckConfig(selection=DeckSelection(config_path=str(path), config_found=False))
-
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("deck config must be an object")
