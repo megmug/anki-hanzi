@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -193,11 +194,13 @@ def parse_bool(value: Any, field_name: str) -> bool:
 
 
 def parse_int(value: Any, field_name: str, minimum: int, maximum: int) -> int:
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ValueError(f"deck config {field_name} must be an integer")
+    if isinstance(value, float) and not value.is_integer():
         raise ValueError(f"deck config {field_name} must be an integer")
     try:
         parsed = int(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"deck config {field_name} must be an integer") from exc
     if parsed < minimum or parsed > maximum:
         raise ValueError(f"deck config {field_name} must be between {minimum} and {maximum}")
@@ -209,9 +212,9 @@ def parse_float(value: Any, field_name: str, minimum: float, maximum: float) -> 
         raise ValueError(f"deck config {field_name} must be a number")
     try:
         parsed = float(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"deck config {field_name} must be a number") from exc
-    if parsed < minimum or parsed > maximum:
+    if not math.isfinite(parsed) or parsed < minimum or parsed > maximum:
         raise ValueError(f"deck config {field_name} must be between {minimum} and {maximum}")
     return parsed
 
