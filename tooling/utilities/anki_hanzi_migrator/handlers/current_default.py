@@ -980,8 +980,11 @@ def validate_preflight(
         and plain_text(record["fields"].get("Simplified", "")) not in ALLOW_SKIPPED_TOUCHED_SIMPLIFIED
     ]
     source_note_ids_by_notetype = {}
+    source_card_counts_by_notetype = Counter()
     for record in source_records:
-        source_note_ids_by_notetype.setdefault(int(record["notetype_id"]), set()).add(int(record["note_id"]))
+        mid = int(record["notetype_id"])
+        source_note_ids_by_notetype.setdefault(mid, set()).add(int(record["note_id"]))
+        source_card_counts_by_notetype[mid] += 1
 
     problems = []
     if not ALLOW_DESTRUCTIVE_MIGRATION:
@@ -1008,15 +1011,26 @@ def validate_preflight(
     if target_missing_note_id_field:
         problems.append(f"Target preview cards without NoteID field: {len(target_missing_note_id_field)}")
     for mid, source_note_ids in sorted(source_note_ids_by_notetype.items()):
+        source_name = next(record["notetype_name"] for record in source_records if int(record["notetype_id"]) == mid)
+        if not is_hanzi_notetype_name(source_name):
+            problems.append(f"Source notetype {source_name!r} ({mid}) is not an expected hanzi notetype")
         total_notes_for_notetype = int(mw.col.db.scalar("select count(*) from notes where mid = ?", mid) or 0)
         if total_notes_for_notetype != len(source_note_ids):
-            source_name = next(
-                record["notetype_name"] for record in source_records if int(record["notetype_id"]) == mid
-            )
             problems.append(
                 f"Source notetype {source_name!r} ({mid}) is used outside {old_root!r}: "
                 f"{total_notes_for_notetype} total notes vs {len(source_note_ids)} notes under root"
             )
+        else:
+            total_cards_for_notetype = int(
+                mw.col.db.scalar(
+                    "select count(*) from cards join notes on cards.nid = notes.id where notes.mid = ?", mid
+                ) or 0
+            )
+            if total_cards_for_notetype != source_card_counts_by_notetype[mid]:
+                problems.append(
+                    f"Source notetype {source_name!r} ({mid}) has cards outside {old_root!r}: "
+                    f"{total_cards_for_notetype} total cards vs {source_card_counts_by_notetype[mid]} cards under root"
+                )
     if disallowed_touched_unmatched:
         problems.append(
             "Touched unmatched source cards are not explicitly allowed: "
