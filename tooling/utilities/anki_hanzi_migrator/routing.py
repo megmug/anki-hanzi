@@ -53,7 +53,7 @@ class MigrationRoute:
 def _index_or_none(build_id: str | None, known_index: dict[str, int]) -> int | None:
     if build_id is None:
         return None
-    return known_index.get(build_id)
+    return known_index[build_id]
 
 
 def _boundary_in_range(build_id: str | None, start: int, end: int, known_index: dict[str, int]) -> bool:
@@ -112,23 +112,35 @@ def plan_route(
     special_transitions: Sequence[SpecialTransition],
 ) -> MigrationRoute:
     known_index = {build_id: index for index, build_id in enumerate(known_builds)}
-    latest_known_build = known_builds[-1]
+    latest_known_build = known_builds[-1] if known_builds else "<unknown>"
     problems: list[str] = []
+
+    if not known_builds or any(not build_id for build_id in known_builds):
+        problems.append("Known migration builds must not be empty or contain empty IDs.")
+    if len(known_index) != len(known_builds):
+        problems.append("Known migration builds must not contain duplicate IDs.")
+
+    for strategy in default_strategies:
+        unknown_bounds = [
+            build_id
+            for build_id in (strategy.valid_from, strategy.valid_until)
+            if build_id is not None and build_id not in known_index
+        ]
+        if unknown_bounds:
+            problems.append(f"Default strategy {strategy.name!r} references unknown builds: {unknown_bounds}")
+            continue
+        valid_from = _index_or_none(strategy.valid_from, known_index)
+        valid_until = _index_or_none(strategy.valid_until, known_index)
+        if valid_from is not None and valid_until is not None and valid_from > valid_until:
+            problems.append(f"Default strategy {strategy.name!r} has a reversed validity range.")
 
     source_index = known_index.get(source_build)
     if source_index is None:
-        return MigrationRoute(
-            source_build=source_build,
-            target_build=target_build,
-            target_is_unknown_future=target_build not in known_index,
-            latest_known_build=latest_known_build,
-            steps=(),
-            problems=(f"Source build is not known by this migrator: {source_build}",),
-        )
+        problems.append(f"Source build is not known by this migrator: {source_build}")
 
     target_is_unknown_future = target_build not in known_index
     target_index = len(known_builds) if target_is_unknown_future else known_index[target_build]
-    if target_index < source_index:
+    if source_index is not None and target_index < source_index:
         problems.append(f"Target build {target_build} is older than source build {source_build}; downgrades are not supported.")
     if problems:
         return MigrationRoute(
