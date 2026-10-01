@@ -869,15 +869,23 @@ def suspend_target_cards(target_card_ids, now):
     return len(target_card_ids)
 
 
-def insert_revlog_rows(source_rows, target_card_id, next_id):
-    # Anki may reuse card IDs from graveyard; delete any existing revlog
-    # for this cid before inserting to avoid UNIQUE constraint violations.
+def insert_revlog_rows(source_rows, target_card_id):
     mw.col.db.execute("delete from revlog where cid = ?", target_card_id)
     for row in source_rows:
+        # Revlog IDs are review timestamps. Preserve them, including when Anki
+        # leaves the original history behind after removing the source deck.
+        existing = mw.col.db.first(
+            "select id, cid, usn, ease, ivl, lastIvl, factor, time, type from revlog where id = ?",
+            row["id"],
+        )
+        if existing is not None:
+            if row_dict(REVLOG_COLUMNS, existing) != row:
+                raise Exception(f"Conflicting review history at timestamp {row['id']}; refusing to overwrite it")
+            mw.col.db.execute("delete from revlog where id = ?", row["id"])
         mw.col.db.execute(
             "insert into revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) "
             "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            next_id,
+            row["id"],
             target_card_id,
             -1,
             row["ease"],
@@ -887,8 +895,25 @@ def insert_revlog_rows(source_rows, target_card_id, next_id):
             row["time"],
             row["type"],
         )
-        next_id += 1
-    return next_id
+
+
+def revlog_state_mismatch(source_rows, target_card_id):
+    expected = [
+        {**row, "cid": target_card_id, "usn": -1}
+        for row in sorted(source_rows, key=lambda row: row["id"])
+    ]
+    actual = revlog_rows_for_card(target_card_id)
+    if expected == actual:
+        return None
+
+    mismatch = {"expected": len(expected), "actual": len(actual)}
+    for index in range(max(len(expected), len(actual))):
+        expected_row = expected[index] if index < len(expected) else None
+        actual_row = actual[index] if index < len(actual) else None
+        if expected_row != actual_row:
+            mismatch["first_differing_row"] = {"expected": expected_row, "actual": actual_row}
+            break
+    return mismatch
 
 
 def count_where(table, column, ids, extra=""):
@@ -1393,7 +1418,6 @@ class CurrentDefaultMigration(MigrationStepHandler):
 
             copy_columns = [col for col in SCHEDULE_COPY_COLUMNS if col in table_columns("cards")]
             now = int(time.time())
-            next_revlog_id = int(mw.col.db.scalar("select max(id) from revlog") or 0) + 1
 
             mw.col.db.execute("savepoint hanzi_stateful_apply")
             state_savepoint_started = True
@@ -1412,7 +1436,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
                     target_card_id = target_by_key[target_key]["card"]["id"]
 
                     copy_full_card_state(source_item["card"], target_card_id, copy_columns, now)
-                    next_revlog_id = insert_revlog_rows(source_item["revlog"], target_card_id, next_revlog_id)
+                    insert_revlog_rows(source_item["revlog"], target_card_id)
                     full_state_copied += 1
                     revlog_rows_inserted += len(source_item["revlog"])
 
@@ -1469,17 +1493,9 @@ class CurrentDefaultMigration(MigrationStepHandler):
                             }
                         )
                         break
-                target_revlog_count = int(
-                    mw.col.db.scalar("select count(*) from revlog where cid = ?", target_record["card"]["id"]) or 0
-                )
-                if target_revlog_count != len(source_item["revlog"]):
-                    revlog_mismatches.append(
-                        {
-                            "key": source_key,
-                            "expected": len(source_item["revlog"]),
-                            "actual": target_revlog_count,
-                        }
-                    )
+                revlog_mismatch = revlog_state_mismatch(source_item["revlog"], target_record["card"]["id"])
+                if revlog_mismatch is not None:
+                    revlog_mismatches.append({"key": source_key, **revlog_mismatch})
 
             for target_key, target_record in final_by_key.items():
                 if target_key in touched_matched_target_keys:
