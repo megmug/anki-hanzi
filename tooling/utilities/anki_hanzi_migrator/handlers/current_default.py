@@ -607,6 +607,20 @@ def build_match_plan(source_by_key, target_by_key):
     }
 
 
+def match_plan_mismatches(expected_plan, actual_plan):
+    expected = expected_plan["matches_by_source_key"]
+    actual = actual_plan["matches_by_source_key"]
+    mismatches = []
+    for source_key in sorted(set(expected) | set(actual)):
+        expected_target = expected.get(source_key, {}).get("target_key")
+        actual_target = actual.get(source_key, {}).get("target_key")
+        if expected_target != actual_target:
+            mismatches.append(
+                {"key": source_key, "expected_target": expected_target, "actual_target": actual_target}
+            )
+    return mismatches
+
+
 def special_match_source_keys(match_plan):
     return [
         key
@@ -1361,10 +1375,18 @@ class CurrentDefaultMigration(MigrationStepHandler):
             if target_info["unknown_kind"]:
                 raise Exception(f"Unknown target kind after import: {len(target_info['unknown_kind'])}")
 
-            match_plan = self.build_match_plan(source_by_key, target_by_key)
+            # Keep the preflight's promised transfers as the verification baseline.
+            match_plan = preflight["match_plan"]
+            imported_match_plan = self.build_match_plan(source_by_key, target_by_key)
+            import_match_mismatches = match_plan_mismatches(match_plan, imported_match_plan)
+            if import_match_mismatches:
+                raise Exception(
+                    "Imported card matches differ from preflight. Restore the collection backup:\n"
+                    + _build_report_json(import_match_mismatches)
+                )
             matches_by_source_key = match_plan["matches_by_source_key"]
             matched_source_keys = match_plan["matched_source_keys"]
-            touched_matched_source_keys = [key for key in matched_source_keys if key in source_snapshot]
+            touched_matched_source_keys = matched_source_keys
             touched_matched_target_keys = {
                 matches_by_source_key[key]["target_key"] for key in touched_matched_source_keys
             }
@@ -1426,11 +1448,12 @@ class CurrentDefaultMigration(MigrationStepHandler):
 
             final_match_plan = self.build_match_plan(source_by_key, final_by_key)
             final_matches_by_source_key = final_match_plan["matches_by_source_key"]
+            final_match_mismatches = match_plan_mismatches(match_plan, final_match_plan)
 
             for source_key in touched_matched_source_keys:
                 source_item = source_snapshot[source_key]
-                final_match = final_matches_by_source_key.get(source_key)
-                target_record = final_by_key.get(final_match["target_key"]) if final_match else None
+                expected_target_key = matches_by_source_key[source_key]["target_key"]
+                target_record = final_by_key.get(expected_target_key)
                 if not target_record:
                     schedule_mismatches.append({"key": source_key, "reason": "missing final target"})
                     continue
@@ -1511,6 +1534,8 @@ class CurrentDefaultMigration(MigrationStepHandler):
                 )
 
             verify_problems = []
+            if final_match_mismatches:
+                verify_problems.append(f"Final matches differ from preflight: {len(final_match_mismatches)}")
             if final_duplicates:
                 verify_problems.append(f"Final duplicate keys: {len(final_duplicates)}")
             if final_missing_key:
@@ -1601,6 +1626,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
                     ],
                     "special_matches": special_match_samples,
                     "loose_matches": loose_match_samples,
+                    "match_plan_mismatches": final_match_mismatches,
                     "schedule_mismatches": schedule_mismatches[:20],
                     "revlog_mismatches": revlog_mismatches[:20],
                     "default_suspended_mismatches": default_suspended_mismatches[:20],
