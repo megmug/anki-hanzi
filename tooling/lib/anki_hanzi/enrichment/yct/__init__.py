@@ -104,6 +104,7 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
     match_methods = Counter()
     matched_terms: list[str] = []
     unmatched_terms: list[dict[str, Any]] = []
+    partial_matches: list[dict[str, Any]] = []
     manual_matches: list[dict[str, Any]] = []
 
     for simplified, source_entries in sorted(entries_by_word.items()):
@@ -126,6 +127,7 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
         for entry in source_entries:
             source_key = yct_pinyin_key(entry["pinyin"])
             if not source_key:
+                unmatched_source_entries.append({**entry, "reason": "missing_pinyin"})
                 continue
 
             tag = f"yct:{entry['level']}"
@@ -157,12 +159,20 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
             for level in sorted(matched_levels, key=int):
                 tagged_words_by_level[level] += 1
                 tagged_forms_by_level[level] += matched_forms_by_level[level]
+            if unmatched_source_entries:
+                partial_matches.append(
+                    {
+                        "word": simplified,
+                        "entries": unmatched_source_entries,
+                        "dictionary_pinyin": [form.pinyin_reading_string for form in word.forms_in_order()],
+                    }
+                )
         else:
             unmatched_terms.append(
                 {
                     "word": simplified,
                     "reason": "pinyin_mismatch",
-                    "entries": unmatched_source_entries or source_entries,
+                    "entries": unmatched_source_entries,
                     "dictionary_pinyin": [form.pinyin_reading_string for form in word.forms_in_order()],
                 }
             )
@@ -181,18 +191,21 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
         "source_terms": len(entries_by_word),
         "duplicate_source_terms": len(duplicate_source_terms),
         "matched_terms": len(matched_terms),
+        "partially_matched_terms": len(partial_matches),
         "unmatched_terms": len(unmatched_terms),
         "match_methods": dict(sorted(match_methods.items())),
         "manual_matches": manual_matches,
         "tagged_words_by_level": tagged_words_by_level,
         "tagged_forms_by_level": tagged_forms_by_level,
         "unmatched_term_samples": unmatched_terms[:25],
+        "partial_match_details": partial_matches,
     }
     return EnrichmentStageResult(
         name="yct_enrichment",
         summary={
             "yct_source_terms": len(entries_by_word),
             "yct_matched_terms": len(matched_terms),
+            "yct_partially_matched_terms": len(partial_matches),
             "yct_unmatched_terms": len(unmatched_terms),
             "yct_tags_by_word": tagged_words_by_level,
             "yct_tags_by_form": tagged_forms_by_level,
