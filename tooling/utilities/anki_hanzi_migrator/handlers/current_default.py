@@ -621,6 +621,13 @@ def match_plan_mismatches(expected_plan, actual_plan):
     return mismatches
 
 
+def target_inventory_mismatches(expected_by_key, actual_by_key):
+    return [
+        {"key": key, "reason": "missing target" if key in expected_by_key else "unexpected target"}
+        for key in sorted(set(expected_by_key) ^ set(actual_by_key))
+    ]
+
+
 def special_match_source_keys(match_plan):
     return [
         key
@@ -1427,6 +1434,13 @@ class CurrentDefaultMigration(MigrationStepHandler):
             if target_info["unknown_kind"]:
                 raise Exception(f"Unknown target kind after import: {len(target_info['unknown_kind'])}")
 
+            imported_inventory_mismatches = target_inventory_mismatches(preflight["target_preview_by_key"], target_by_key)
+            if imported_inventory_mismatches:
+                raise Exception(
+                    "Imported target inventory differs from preflight. Restore the collection backup:\n"
+                    + _build_report_json(imported_inventory_mismatches)
+                )
+
             # Keep the preflight's promised transfers as the verification baseline.
             match_plan = preflight["match_plan"]
             imported_match_plan = self.build_match_plan(source_by_key, target_by_key)
@@ -1500,6 +1514,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
             final_match_plan = self.build_match_plan(source_by_key, final_by_key)
             final_matches_by_source_key = final_match_plan["matches_by_source_key"]
             final_match_mismatches = match_plan_mismatches(match_plan, final_match_plan)
+            final_inventory_mismatches = target_inventory_mismatches(preflight["target_preview_by_key"], final_by_key)
 
             for source_key in touched_matched_source_keys:
                 source_item = source_snapshot[source_key]
@@ -1577,6 +1592,8 @@ class CurrentDefaultMigration(MigrationStepHandler):
                 )
 
             verify_problems = []
+            if final_inventory_mismatches:
+                verify_problems.append(f"Final target inventory differs from preflight: {len(final_inventory_mismatches)}")
             if final_match_mismatches:
                 verify_problems.append(f"Final matches differ from preflight: {len(final_match_mismatches)}")
             if final_duplicates:
@@ -1670,6 +1687,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
                     "special_matches": special_match_samples,
                     "loose_matches": loose_match_samples,
                     "match_plan_mismatches": final_match_mismatches,
+                    "target_inventory_mismatches": final_inventory_mismatches,
                     "schedule_mismatches": schedule_mismatches[:20],
                     "revlog_mismatches": revlog_mismatches[:20],
                     "default_suspended_mismatches": default_suspended_mismatches[:20],
