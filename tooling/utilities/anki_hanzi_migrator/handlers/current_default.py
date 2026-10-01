@@ -993,6 +993,19 @@ def validate_preflight(
         problems.append(f"APKG_PATH does not exist: {apkg_path}")
     if imported_root != old_root and deck_ids_under(imported_root):
         problems.append(f"Imported root already exists before migration: {imported_root}")
+    outside_target_decks = sorted(
+        {
+            record.get("deck_name") or "<missing>"
+            for record in target_preview_records
+            if record.get("deck_name") != imported_root
+            and not (record.get("deck_name") or "").startswith(imported_root + "::")
+        }
+    )
+    if outside_target_decks:
+        problems.append(
+            f"Target APKG contains cards outside the expected root {imported_root!r}: "
+            + ", ".join(outside_target_decks)
+        )
     if touched_unknown_kind:
         problems.append(f"Touched source cards with unknown kind: {len(touched_unknown_kind)}")
     if target_preview_info["unknown_kind"]:
