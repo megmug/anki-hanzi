@@ -13,6 +13,7 @@ import time
 import traceback
 import zipfile
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -648,24 +649,25 @@ def special_match_type_counts(match_plan):
     )
 
 
+@contextmanager
 def extract_apkg_collection(apkg_path):
     if not os.path.exists(apkg_path):
         raise Exception(f"APKG_PATH does not exist: {apkg_path}")
 
-    tempdir = tempfile.mkdtemp(prefix="hanzi-state-apply-preview-")
-    with zipfile.ZipFile(apkg_path) as archive:
-        names = archive.namelist()
-        db_name = None
-        for candidate in ["collection.anki21", "collection.anki2"]:
-            if candidate in names:
-                db_name = candidate
-                break
-        if not db_name:
-            raise Exception("APKG contains no collection.anki2/collection.anki21")
-        db_path = os.path.join(tempdir, db_name)
-        with archive.open(db_name) as source, open(db_path, "wb") as target:
-            target.write(source.read())
-    return tempdir, db_path, db_name
+    with tempfile.TemporaryDirectory(prefix="hanzi-state-apply-preview-") as tempdir:
+        with zipfile.ZipFile(apkg_path) as archive:
+            names = archive.namelist()
+            db_name = None
+            for candidate in ["collection.anki21", "collection.anki2"]:
+                if candidate in names:
+                    db_name = candidate
+                    break
+            if not db_name:
+                raise Exception("APKG contains no collection.anki2/collection.anki21")
+            db_path = os.path.join(tempdir, db_name)
+            with archive.open(db_name) as source, open(db_path, "wb") as target:
+                target.write(source.read())
+        yield db_path, db_name
 
 
 def load_legacy_apkg_metadata(conn):
@@ -679,8 +681,7 @@ def load_legacy_apkg_metadata(conn):
 
 
 def collect_target_records_from_apkg(apkg_path):
-    tempdir, db_path, db_name = extract_apkg_collection(apkg_path)
-    try:
+    with extract_apkg_collection(apkg_path) as (db_path, db_name):
         conn = sqlite3.connect(db_path)
         try:
             models, decks = load_legacy_apkg_metadata(conn)
@@ -743,12 +744,6 @@ def collect_target_records_from_apkg(apkg_path):
             }
         finally:
             conn.close()
-    finally:
-        try:
-            os.remove(db_path)
-            os.rmdir(tempdir)
-        except Exception:
-            pass
 
 
 def revlog_rows_for_card(card_id):
