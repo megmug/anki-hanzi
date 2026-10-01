@@ -69,15 +69,17 @@ def apply_source_prelude_rules(
     for definition in bucket_definitions_by_phase("source_prelude"):
         selected_items: list[HskSourceForm] = []
         input_source_form_count = len(remaining_source_form_ids)
+        unassigned_source_form_ids = set(remaining_source_form_ids)
 
         for rule in definition.matching_rules:
             result = rule.match_source_prelude(
                 source_forms_by_id,
                 target_form_index,
-                remaining_source_form_ids,
+                unassigned_source_form_ids,
                 definition.name,
             )
             selected_items.extend(result["selected_items"])
+            unassigned_source_form_ids.difference_update(result["selected_source_form_ids"])
 
         consumption_rule = definition.consumption_rule
         consumption: SourcePreludeConsumption = (
@@ -113,7 +115,7 @@ def apply_pair_pipeline_rules(working_pairs: list[HskMatchingPair]) -> PairPipel
         selected_items: list[HskMatchingPair] = []
 
         for rule in definition.matching_rules:
-            result = rule.match_pairs(input_items, definition.name)
+            result = rule.match_pairs(remaining_items, definition.name)
             selected_items.extend(result["selected_items"])
             remaining_items = result["remaining_items"]
 
@@ -137,14 +139,16 @@ def apply_pair_pipeline_rules(working_pairs: list[HskMatchingPair]) -> PairPipel
 
     for definition in bucket_definitions_by_phase("terminal"):
         input_items = remaining_items
-        rule = definition.matching_rules[0]
-        result = rule.match_pairs(input_items, definition.name)
-        selected_items = result["selected_items"]
+        selected_items: list[HskMatchingPair] = []
+        for rule in definition.matching_rules:
+            result = rule.match_pairs(remaining_items, definition.name)
+            selected_items.extend(result["selected_items"])
+            remaining_items = result["remaining_items"]
         consumption_rule = definition.consumption_rule
         consumption: PairConsumption = (
-            consumption_rule.consume_pairs(selected_items, result["remaining_items"])
+            consumption_rule.consume_pairs(selected_items, remaining_items)
             if consumption_rule is not None
-            else empty_pair_consumption(result["remaining_items"])
+            else empty_pair_consumption(remaining_items)
         )
         remaining_items = consumption["remaining_items"]
         for source_form_id in consumption["consumed_source_form_ids"]:
