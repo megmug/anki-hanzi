@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 from pathlib import Path
@@ -603,6 +604,23 @@ def _validate_current_step_source(deck_root: str, step: PlannedMigrationStep) ->
     return None
 
 
+def _validate_current_step_target(apkg_path: str, step: PlannedMigrationStep) -> str | None:
+    target_info = registry.CURRENT_DEFAULT.target_apkg_build_info(apkg_path)
+    if target_info["problems"]:
+        return "Target APKG build could not be identified:\n" + "\n".join(target_info["problems"])
+    if target_info["build_id"] != step.to_build:
+        return f"Target APKG build is {target_info['build_id']}, but this step requires {step.to_build}."
+    return None
+
+
+def _apkg_digest(apkg_path: str) -> str:
+    digest = hashlib.sha256()
+    with open(apkg_path, "rb") as package:
+        for chunk in iter(lambda: package.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def run_migration() -> None:
     if not _confirm_backup():
         showInfo("Migration cancelled. No changes were applied.")
@@ -636,12 +654,14 @@ def run_migration() -> None:
 
     for index, step in enumerate(route.steps, 1):
         step_apkg_path = apkg_paths[step.to_build]
-        source_problem = _validate_current_step_source(deck_root, step)
-        if source_problem:
-            showCritical(source_problem)
-            return
-
         try:
+            package_digest = _apkg_digest(step_apkg_path)
+            source_problem = _validate_current_step_source(deck_root, step)
+            if source_problem:
+                raise ValueError(source_problem)
+            target_problem = _validate_current_step_target(step_apkg_path, step)
+            if target_problem:
+                raise ValueError(target_problem)
             preflight = step.handler.prepare_preflight(
                 apkg_path=step_apkg_path,
                 deck_root=deck_root,
@@ -661,6 +681,16 @@ def run_migration() -> None:
         )
         dialog.exec()
         if not dialog.accepted_for_apply:
+            return
+
+        try:
+            source_problem = _validate_current_step_source(deck_root, step)
+            if source_problem:
+                raise ValueError(source_problem)
+            if _apkg_digest(step_apkg_path) != package_digest:
+                raise ValueError("The target APKG changed during preflight. Restart migration to review the new package.")
+        except Exception as exc:
+            showCritical(f"Migration step did not start:\n\n{exc}")
             return
 
         try:
