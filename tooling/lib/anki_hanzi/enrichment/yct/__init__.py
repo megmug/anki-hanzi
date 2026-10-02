@@ -120,7 +120,6 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
             continue
 
         matched_levels: set[str] = set()
-        matched_forms_by_level = {level: 0 for level in YCT_LEVELS}
         unmatched_source_entries: list[dict[str, Any]] = []
         forms = list(word.forms.values())
 
@@ -140,7 +139,6 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
 
             if matching_forms:
                 matched_levels.add(entry["level"])
-                matched_forms_by_level[entry["level"]] += len(matching_forms)
                 match_methods[match_method] += 1
                 if match_method == "manual_yct_match":
                     manual_matches.append(
@@ -158,7 +156,7 @@ def apply_yct_enrichment_to_state(state: LexiconState, yct_data_dir: Path) -> En
             matched_terms.append(simplified)
             for level in sorted(matched_levels, key=int):
                 tagged_words_by_level[level] += 1
-                tagged_forms_by_level[level] += matched_forms_by_level[level]
+                tagged_forms_by_level[level] += sum(f"yct:{level}" in form.tags for form in forms)
             if unmatched_source_entries:
                 partial_matches.append(
                     {
