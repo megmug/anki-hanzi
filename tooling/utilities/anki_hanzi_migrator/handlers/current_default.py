@@ -361,7 +361,7 @@ def collect_current_records(root):
             card["nid"],
         )
         if not note_row:
-            continue
+            raise Exception(f"Card {cid} references missing note {card['nid']}; migration is blocked")
 
         note_id, guid, mid, flds, tags = note_row
         notetype = get_mw_notetype(mid)
@@ -685,6 +685,12 @@ def collect_target_records_from_apkg(apkg_path):
         conn = sqlite3.connect(db_path)
         try:
             models, decks = load_legacy_apkg_metadata(conn)
+            missing_note = conn.execute(
+                "select cards.id, cards.nid from cards left join notes on cards.nid = notes.id "
+                "where notes.id is null order by cards.id limit 1"
+            ).fetchone()
+            if missing_note:
+                raise Exception(f"APKG card {missing_note[0]} references missing note {missing_note[1]}")
             rows = conn.execute(
                 "select cards.id, cards.nid, cards.did, cards.ord, cards.mod, cards.usn, "
                 "cards.type, cards.queue, cards.due, cards.ivl, cards.factor, cards.reps, "
