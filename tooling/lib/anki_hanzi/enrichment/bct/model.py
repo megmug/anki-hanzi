@@ -107,8 +107,6 @@ BctMatchingFunction = Callable[["LexiconState", BctSourceTerm], BctBucketMatch |
 @dataclass(frozen=True)
 class BctConsumptionResult:
     tags_applied: bool
-    target_word_count: int = 0
-    target_form_count: int = 0
 
 
 BctConsumptionFunction = Callable[[BctBucketMatch], BctConsumptionResult]

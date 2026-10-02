@@ -97,8 +97,6 @@ def apply_bct_enrichment_to_state(state: LexiconState, bct_data_dir: Path) -> En
     source_terms = group_bct_source_terms(entries)
     remaining_terms = list(source_terms)
 
-    tagged_words_by_level = {level: 0 for level in BCT_LEVELS}
-    tagged_forms_by_level = {level: 0 for level in BCT_LEVELS}
     match_methods = Counter()
     ignored_methods = Counter()
     ignored_by_reason = Counter()
@@ -156,12 +154,17 @@ def apply_bct_enrichment_to_state(state: LexiconState, bct_data_dir: Path) -> En
                     }
                 )
 
-            for level in match.source.levels:
-                if consumption.tags_applied:
-                    tagged_words_by_level[level] += consumption.target_word_count
-                    tagged_forms_by_level[level] += consumption.target_form_count
-
     duplicate_terms = duplicate_source_terms(source_terms)
+    # Different source terms can resolve to the same target. Count tagged
+    # targets in the resulting state, not how often a tag was applied.
+    tagged_words_by_level = {
+        level: sum(f"bct:{level}" in word.tags for word in state.words.values())
+        for level in BCT_LEVELS
+    }
+    tagged_forms_by_level = {
+        level: sum(f"bct:{level}" in form.tags for word in state.words.values() for form in word.forms.values())
+        for level in BCT_LEVELS
+    }
 
     report = {
         "stage": "bct_enrichment",
