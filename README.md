@@ -100,11 +100,16 @@ The migrator add-on:
 - default-suspends every generated target card,
 - matches only learned/touched old cards to new cards by stable NoteID/GUID where possible and by controlled loose keys when card identity changed,
 - copies full scheduler state, suspended state, and revlog for those learned cards,
-- leaves untouched generated cards in their default suspended state.
+- leaves untouched generated cards in their default suspended state,
+- verifies after every step that database records outside the migrated deck tree and all deck presets are unchanged.
 
 ## Safety
 
 Before importing or migrating Anki decks, make a full Anki backup.
+The database preservation check covers cards, notes, review history, deck records, note types, fields, templates,
+and presets. It excludes collection-wide bookkeeping (such as sync metadata and tag caches) and media files.
+Any mismatch or verification error stops the migration route; this detects damage but does not automatically roll it back.
+Restore the collection backup if a migration step fails.
 There is currently no generally usable migration path from upstream xiehanzi decks.
 
 ## Acknowledgements

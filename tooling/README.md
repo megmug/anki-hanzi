@@ -26,6 +26,9 @@ These programs are run manually for maintenance, analysis, or upgrades.
 - `utilities/diff_apkg.py`: compare two APKG files semantically and write a Markdown diff report.
 - `utilities/anki_hanzi_migrator/`: stateless Anki add-on that plans a BuildID migration route and migrates a selected
   existing Hanzi deck through step-specific preflight/apply/result phases to a selected target APKG.
+  `collection_guard.py` snapshots and compares the database outside the selected deck tree around each handler's
+  apply phase. The shared UI reports this check independently of the historical handler; no additional handler
+  interface is required. Shared notes and note types, orphaned review history, and all presets are protected too.
 - `utilities/update_cc_cedict_snapshot.py`: refresh the pinned CC-CEDICT snapshot when an intentional source-data update is needed.
 
 ## Formatting

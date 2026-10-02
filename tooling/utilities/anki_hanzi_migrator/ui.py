@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from aqt.qt import (
 from aqt.utils import showCritical, showInfo, showWarning
 
 from . import registry
+from .collection_guard import compare_unrelated_database, snapshot_unrelated_database
 from .routing import MigrationRoute, PlannedMigrationStep
 
 
@@ -531,9 +533,7 @@ class PackageRequirementsDialog(QDialog):
         for build_id in _required_apkg_builds(self._route):
             path = self._apkg_paths.get(build_id)
             self._status_labels[build_id].setText(_badge_html("ok" if path else "warn"))
-            self._path_labels[build_id].setText(
-                html.escape(str(Path(path).name if path else "No APKG selected yet."))
-            )
+            self._path_labels[build_id].setText(html.escape(str(Path(path).name if path else "No APKG selected yet.")))
         if self._continue_button is not None:
             self._continue_button.setEnabled(not _missing_apkg_builds(self._route, self._apkg_paths))
 
@@ -621,6 +621,24 @@ def _apkg_digest(apkg_path: str) -> str:
     return digest.hexdigest()
 
 
+def _database_check_item(check: dict[str, Any]) -> dict[str, Any]:
+    if check["success"]:
+        counts = check["tables"]
+        return _item(
+            "ok",
+            "Other decks unchanged",
+            f"{counts['cards']['before_count']} cards, {counts['notes']['before_count']} notes, "
+            f"and {counts['revlog']['before_count']} review-history rows outside the migrated deck verified unchanged.",
+            ["Deck records, note types, fields, templates, and all presets also verified. Media not checked."],
+        )
+    return _item(
+        "error",
+        "Other decks could not be verified unchanged",
+        "Migration stopped. Restore the full collection backup before continuing.",
+        check["problems"],
+    )
+
+
 def run_migration() -> None:
     if not _confirm_backup():
         showInfo("Migration cancelled. No changes were applied.")
@@ -688,7 +706,10 @@ def run_migration() -> None:
             if source_problem:
                 raise ValueError(source_problem)
             if _apkg_digest(step_apkg_path) != package_digest:
-                raise ValueError("The target APKG changed during preflight. Restart migration to review the new package.")
+                raise ValueError(
+                    "The target APKG changed during preflight. Restart migration to review the new package."
+                )
+            database_before = snapshot_unrelated_database(mw.col, deck_root)
         except Exception as exc:
             showCritical(f"Migration step did not start:\n\n{exc}")
             return
@@ -699,20 +720,40 @@ def run_migration() -> None:
                 deck_root=deck_root,
                 target_preset_name=preset_name,
             )
+        except Exception:
+            result = {"success": False, "json": None, "text": "Migration crashed:\n\n" + traceback.format_exc()}
+
+        # Check even failed handlers: a partial migration may already have written data.
+        try:
+            database_check = compare_unrelated_database(database_before, snapshot_unrelated_database(mw.col, deck_root))
         except Exception as exc:
-            showCritical(f"Migration crashed:\n\n{exc}")
-            return
+            database_check = {
+                "success": False,
+                "tables": {},
+                "problems": [f"Database preservation check failed: {exc}"],
+            }
+        step_success = result["success"] and database_check["success"]
+        report_text = ("MIGRATION STEP SUCCEEDED" if step_success else "MIGRATION STEP FAILED") + "\n\n"
+        report_text += _json_text(
+            {"success": step_success, "database_preservation": database_check, "handler_result": result}
+        )
+        _copy_text(report_text)
 
         result_dialog = ReportDialog(
             title=f"Anki Hanzi Migration Step {index}/{len(route.steps)} Result" + title_suffix,
-            message="Migration step finished. Review the verification report before continuing.",
+            message=(
+                "Migration step finished. Review the verification report before continuing."
+                if step_success
+                else "Migration step failed verification. Restore the collection backup before continuing."
+            ),
             items=[_step_context_item(step, index, len(route.steps), step_apkg_path)]
+            + [_database_check_item(database_check)]
             + step.handler.result_items(result["json"]),
-            report_text=result["text"],
+            report_text=report_text,
         )
         result_dialog.exec()
-        if not result["success"]:
-            showWarning("Migration stopped because this step did not verify cleanly.")
+        if not step_success:
+            showWarning("Migration stopped because this step did not verify cleanly. Restore the collection backup.")
             return
 
     showInfo("All planned Hanzi migration steps completed successfully.")
