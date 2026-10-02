@@ -1377,6 +1377,10 @@ class CurrentDefaultMigration(MigrationStepHandler):
             )
 
             source_records = source_info["records"]
+            source_card_ids = [record["card"]["id"] for record in source_records]
+            source_orphan_condition = (
+                f"cid in {ids2str_local(source_card_ids)} and cid not in (select id from cards)"
+            )
             self._append_build_id_integrity_problems(
                 preflight,
                 source_records=source_records,
@@ -1482,7 +1486,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
                 if imported_root != final_root:
                     mw.col.decks.rename(imported_root_did, final_root)
 
-                mw.col.db.execute("delete from revlog where cid not in (select id from cards)")
+                mw.col.db.execute(f"delete from revlog where {source_orphan_condition}")
 
                 mw.col.db.execute("release savepoint hanzi_stateful_apply")
                 state_savepoint_started = False
@@ -1558,6 +1562,9 @@ class CurrentDefaultMigration(MigrationStepHandler):
             orphaned_revlog_rows = int(
                 mw.col.db.scalar("select count(*) from revlog where cid not in (select id from cards)") or 0
             )
+            orphaned_source_revlog_rows = int(
+                mw.col.db.scalar(f"select count(*) from revlog where {source_orphan_condition}") or 0
+            )
             default_only_target_keys = final_match_plan["target_only_keys"]
             skipped_touched_kind_counts = Counter(record.get("kind") for record in touched_unmatched)
             loose_match_samples = []
@@ -1606,8 +1613,8 @@ class CurrentDefaultMigration(MigrationStepHandler):
                 )
             if default_suspended_mismatches:
                 verify_problems.append(f"Default-suspended fresh card mismatches: {len(default_suspended_mismatches)}")
-            if orphaned_revlog_rows:
-                verify_problems.append(f"Orphaned revlog rows still present: {orphaned_revlog_rows}")
+            if orphaned_source_revlog_rows:
+                verify_problems.append(f"Orphaned source revlog rows still present: {orphaned_source_revlog_rows}")
             if preset_counts != Counter({target_preset_id: len(deck_ids_under(final_root))}):
                 verify_problems.append(f"Deck preset counts unexpected: {dict(preset_counts)}")
             if final_plus_notetype_names:
@@ -1670,6 +1677,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
                     "queue_counts": dict(sorted(queue_counts.items())),
                     "revlog_rows_on_final_cards": final_revlog_on_final_cards,
                     "orphaned_revlog_rows": orphaned_revlog_rows,
+                    "orphaned_source_revlog_rows": orphaned_source_revlog_rows,
                     "preset_counts": dict(preset_counts),
                 },
                 "samples": {
