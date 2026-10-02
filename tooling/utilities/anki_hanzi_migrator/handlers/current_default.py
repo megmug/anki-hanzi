@@ -1014,6 +1014,14 @@ def validate_preflight(
             f"Target APKG contains cards outside the expected root {imported_root!r}: "
             + ", ".join(outside_target_decks)
         )
+    filtered_source_cards = [record for record in source_records if record["card"]["odid"]]
+    if filtered_source_cards:
+        filtered_decks = sorted({record["deck_name"] for record in filtered_source_cards})
+        problems.append(
+            f"Source contains {len(filtered_source_cards)} cards in filtered decks: "
+            + ", ".join(filtered_decks)
+            + ". Empty these filtered decks in Anki to return the cards to their original decks before migrating."
+        )
     if touched_unknown_kind:
         problems.append(f"Touched source cards with unknown kind: {len(touched_unknown_kind)}")
     if target_preview_info["unknown_kind"]:
