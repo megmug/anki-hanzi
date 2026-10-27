@@ -60,6 +60,7 @@ def selected_enrichment_samples(samples: Mapping[str, Any]) -> dict[str, Any]:
         "exact_definition_also_pr_added_readings",
         "semicolon_split_exact_definition_also_pr_added_readings",
         "html_subform_definition_cover_targets",
+        "source_see_colloquial_pr_added_readings",
         "hanzi_non_exact_definition_mismatches",
         "hanzi_non_exact_definition_mismatches_by_type",
         "dropped_duplicates",

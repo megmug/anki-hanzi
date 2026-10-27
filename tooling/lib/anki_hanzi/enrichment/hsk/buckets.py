@@ -16,6 +16,7 @@ from anki_hanzi.enrichment.hsk.consumption import (
     CONSUME_MISSING_DICTIONARY_WORD_BUCKET_RULE,
     CONSUME_PERFECT_MATCH_BUCKET_RULE,
     CONSUME_SEMICOLON_SPLIT_EXACT_DEFINITION_ALSO_PR_BUCKET_RULE,
+    CONSUME_SOURCE_SEE_COLLOQUIAL_PR_BUCKET_RULE,
     CONSUME_SPOKEN_TONE_VARIANT_BUCKET_RULE,
     CONSUME_SPOKEN_TONE_VARIANT_SOURCE_FORM_PAIRS_RULE,
     ConsumptionRuleDefinition,
@@ -28,6 +29,7 @@ from anki_hanzi.enrichment.hsk.consumption import (
     DROP_MISSING_DICTIONARY_WORD_SOURCE_FORMS_RULE,
     DROP_PERFECT_MATCH_SOURCE_FORM_PAIRS_RULE,
     DROP_SEMICOLON_SPLIT_EXACT_DEFINITION_ALSO_PR_SOURCE_FORM_PAIRS_RULE,
+    DROP_SOURCE_SEE_COLLOQUIAL_PR_SOURCE_FORM_PAIRS_RULE,
     StateConsumptionRuleDefinition,
 )
 from anki_hanzi.enrichment.hsk.matching import (
@@ -41,6 +43,7 @@ from anki_hanzi.enrichment.hsk.matching import (
     MatchingRuleDefinition,
     MISSING_DICTIONARY_WORD_RULE,
     SEMICOLON_SPLIT_EXACT_DEFINITION_ALSO_PR_UNIQUE_RULE,
+    SOURCE_SEE_COLLOQUIAL_PR_UNIQUE_RULE,
     SPOKEN_TONE_VARIANT_UNIQUE_RULE,
     STRICT_PINYIN_EXACT_UNIQUE_RULE,
 )
@@ -98,6 +101,15 @@ BUCKET_DESCRIPTIONS = {
         "matches after rule-local semicolon splitting, and the matched subforms cover all remaining dictionary "
         "candidates exactly once. The source form is resolved by applying tags and metadata directly to every "
         "covered dictionary form without changing dictionary Pinyin or definitions."
+    ),
+    "source_see_colloquial_pr": (
+        "A source form has a single reading and exactly one same-Simplified dictionary candidate with a different "
+        "single reading. Its HTML has exactly two Pinyin/definition blocks, one per reading, covering all source "
+        "definitions. The source-reading block contains only an exact see-reference to that dictionary form, "
+        "which reciprocally lists the source reading exactly once in standalone colloquial-pr declarations. "
+        "Reading comparisons use strict numbered preserve-case equality. The source form is consumed by applying "
+        "tags and metadata and adding only the attested source reading in dictionary spelling. The primary "
+        "dictionary reading and definitions stay unchanged; no other listed pronunciation is imported."
     ),
     "missing_dictionary_word": (
         "No exact Simplified target key exists in CC-CEDICT. The source form is resolved by creating synthetic "
@@ -234,6 +246,15 @@ BUCKET_DEFINITIONS = {
         matching_rules=(HTML_SUBFORM_DEFINITION_COVER_UNIQUE_RULE,),
         consumption_rule=DROP_HTML_SUBFORM_DEFINITION_COVER_SOURCE_FORM_PAIRS_RULE,
         state_consumption_rule=CONSUME_HTML_SUBFORM_DEFINITION_COVER_BUCKET_RULE,
+    ),
+    "source_see_colloquial_pr": _bucket(
+        "source_see_colloquial_pr",
+        priority=900,
+        phase="pair_pipeline",
+        report_items=True,
+        matching_rules=(SOURCE_SEE_COLLOQUIAL_PR_UNIQUE_RULE,),
+        consumption_rule=DROP_SOURCE_SEE_COLLOQUIAL_PR_SOURCE_FORM_PAIRS_RULE,
+        state_consumption_rule=CONSUME_SOURCE_SEE_COLLOQUIAL_PR_BUCKET_RULE,
     ),
     "default_unresolved": _bucket(
         "default_unresolved",

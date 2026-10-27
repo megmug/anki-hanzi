@@ -63,6 +63,7 @@ def compact_report_item(item: BucketItem) -> dict[str, Any]:
         "exact_definition_also_pr",
         "semicolon_split_exact_definition_also_pr",
         "html_subform_definition_cover",
+        "source_see_colloquial_pr",
     ):
         if extra_key in context:
             report[extra_key] = context[extra_key]
@@ -333,6 +334,7 @@ def build_enrichment_summary(
             "semicolon_split_exact_definition_also_pr"
         ],
         "hanzi_form_html_subform_definition_cover_matches": form_stats["match_types"]["html_subform_definition_cover"],
+        "hanzi_form_source_see_colloquial_pr_matches": form_stats["match_types"]["source_see_colloquial_pr"],
         "hanzi_non_exact_matches": len(form_stats["non_exact_matches"]),
         "hanzi_non_exact_definition_mismatches": len(form_stats["non_exact_definition_mismatches"]),
         "hanzi_pinyin_case_preserved": len(form_stats["pinyin_case_preserved"]),
@@ -386,6 +388,9 @@ def build_enrichment_report(
             ],
             "html_subform_definition_cover_targets": pipeline_enrichment["html_subform_definition_cover"][
                 "matched_targets"
+            ][:25],
+            "source_see_colloquial_pr_added_readings": pipeline_enrichment["source_see_colloquial_pr"][
+                "added_readings"
             ][:25],
             "hanzi_non_exact_definition_mismatches": form_stats["non_exact_definition_mismatches"],
             "hanzi_non_exact_definition_mismatches_by_type": group_non_exact_matches(

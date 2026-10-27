@@ -160,6 +160,7 @@ def new_form_stats() -> dict[str, Any]:
             "exact_definition_also_pr": 0,
             "semicolon_split_exact_definition_also_pr": 0,
             "html_subform_definition_cover": 0,
+            "source_see_colloquial_pr": 0,
         },
         "non_exact_matches": [],
         "non_exact_definition_mismatches": [],
@@ -292,6 +293,12 @@ DROP_HTML_SUBFORM_DEFINITION_COVER_SOURCE_FORM_PAIRS_RULE = ConsumptionRuleDefin
     name="drop_html_subform_definition_cover_source_form_pairs",
     report_only_effect="remove all remaining matching pairs for the HTML-subform-covered source form",
     enrichment_effect="apply tags and metadata directly to every dictionary form covered by xiehanzi HTML subforms",
+    handler=drop_source_form_pairs,
+)
+DROP_SOURCE_SEE_COLLOQUIAL_PR_SOURCE_FORM_PAIRS_RULE = ConsumptionRuleDefinition(
+    name="drop_source_see_colloquial_pr_source_form_pairs",
+    report_only_effect="remove all remaining matching pairs for the reciprocal-reference source form",
+    enrichment_effect="apply tags and metadata and add only the explicitly attested source reading",
     handler=drop_source_form_pairs,
 )
 ASSERT_DEFAULT_UNRESOLVED_EMPTY_RULE = ConsumptionRuleDefinition(
@@ -814,6 +821,62 @@ def consume_semicolon_split_exact_definition_also_pr_bucket(
     )
 
 
+def consume_source_see_colloquial_pr_bucket(
+    state: LexiconState,
+    deck_entries: list[dict[str, Any]],
+    pipeline: dict[str, Any],
+    form_stats: dict[str, Any],
+) -> dict[str, Any]:
+    selected_items = pipeline["bucket_results"]["source_see_colloquial_pr"]["selected_items"]
+    consumed_entries: list[dict[str, Any]] = []
+    added_readings: list[dict[str, Any]] = []
+
+    for item in sorted(selected_items, key=item_source_form_id):
+        context = item.context.get("source_see_colloquial_pr")
+        if not context or not context.get("attested_source_reading"):
+            raise ValueError(f"Source-see colloquial-pr bucket lacks attested reading context: {item!r}")
+
+        word, form, _, _ = target_word_and_form_from_pair(state, item)
+        entry = deck_entry_for_pair(deck_entries, item)
+        reading = context["attested_source_reading"]
+        if (
+            word.simplified != entry["simplified"]
+            or form.pinyin != item.dictionary_primary_pinyin
+            or tuple(form.pinyin_readings) != item.dictionary_pinyin_readings
+            or tuple(form.definitions) != item.dictionary_definitions
+            or context["dictionary_colloquial_definition"] not in form.definitions
+            or pinyin_rule_kind(entry["pinyin"], reading) != "exact"
+        ):
+            raise ValueError(f"Source-see colloquial-pr target or attested source reading changed: {item!r}")
+
+        old_readings = list(form.pinyin_readings)
+        added = form.add_pinyin_readings(reading)
+        apply_entry_metadata_to_selected_form(word, form, entry)
+        word.sort_forms_by_pinyin()
+        form_stats["matched"] += 1
+        record_form_match(form_stats, "source_see_colloquial_pr")
+        consumed_entries.append(entry)
+        added_readings.append(
+            {
+                "entry": entry_summary(entry),
+                "target": item.target_report(),
+                **context,
+                "dictionary_primary_pinyin": form.pinyin,
+                "old_pinyin_readings": old_readings,
+                "added_pinyin_readings": added,
+                "new_pinyin_readings": list(form.pinyin_readings),
+            }
+        )
+
+    return {
+        "entries": [entry_summary(entry) for entry in consumed_entries],
+        "entry_count": len(consumed_entries),
+        "added_readings": added_readings,
+        "form_stats": form_stats,
+        "state_effect": "applied tags and metadata and added only the reciprocally attested source reading",
+    }
+
+
 def consume_missing_dictionary_word_bucket(
     state: LexiconState,
     deck_entries: list[dict[str, Any]],
@@ -983,6 +1046,12 @@ CONSUME_HTML_SUBFORM_DEFINITION_COVER_BUCKET_RULE = StateConsumptionRuleDefiniti
     bucket="html_subform_definition_cover",
     state_effect="apply HTML-subform tags and metadata directly without changing dictionary Pinyin or definitions",
     handler=consume_html_subform_definition_cover_bucket,
+)
+CONSUME_SOURCE_SEE_COLLOQUIAL_PR_BUCKET_RULE = StateConsumptionRuleDefinition(
+    name="consume_source_see_colloquial_pr_bucket",
+    bucket="source_see_colloquial_pr",
+    state_effect="apply tags and metadata and add only the reciprocally attested source reading; keep definitions",
+    handler=consume_source_see_colloquial_pr_bucket,
 )
 ASSERT_DEFAULT_UNRESOLVED_BUCKET_EMPTY_RULE = StateConsumptionRuleDefinition(
     name="assert_default_unresolved_bucket_empty",

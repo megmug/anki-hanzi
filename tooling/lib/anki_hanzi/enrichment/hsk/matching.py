@@ -723,6 +723,77 @@ def match_html_subform_definition_cover_pairs(
     )
 
 
+def match_source_see_colloquial_pr_pairs(
+    working_pairs: list[HskMatchingPair],
+    bucket: str,
+    matching_rule: str,
+) -> MatchingRuleResult:
+    def context_for_pair(pair: HskMatchingPair) -> PairContext | None:
+        source = pair.source_form.entry
+        if pair.source_form.candidate_count != 1 or source["simplified"] != pair.dictionary_simplified:
+            return None
+        if "/" in source["pinyin"] or "/" in pair.dictionary_pinyin:
+            return None
+        source_readings = pinyin_readings(source["pinyin"])
+        target_readings = pinyin_readings(pair.dictionary_pinyin)
+        if len(source_readings) != 1 or len(target_readings) != 1:
+            return None
+        if source_readings[0].strict == target_readings[0].strict:
+            return None
+
+        subentries = source_html_subentries(source["meaning_html"])
+        if len(subentries) != 2 or len(list(PINYIN_BLOCK_RE.finditer(source["meaning_html"]))) != 2:
+            return None
+        if any("/" in subentry["pinyin"] for subentry in subentries):
+            return None
+        if set(pair.source_definitions) != {
+            definition for subentry in subentries for definition in subentry["definitions"]
+        }:
+            return None
+        source_blocks = [
+            subentry for subentry in subentries if classify_pinyin(subentry["pinyin"], source["pinyin"]) == "exact"
+        ]
+        target_blocks = [
+            subentry
+            for subentry in subentries
+            if classify_pinyin(subentry["pinyin"], pair.dictionary_pinyin) == "exact"
+        ]
+        if len(source_blocks) != 1 or len(target_blocks) != 1:
+            return None
+        reference = f"see {pair.dictionary_simplified}[{pair.dictionary_pinyin}]"
+        if source_blocks[0]["definitions"] != [reference]:
+            return None
+
+        # Require a reciprocal, standalone pronunciation declaration, not a mention inside a gloss.
+        attestations: list[tuple[str, str]] = []
+        for definition in pair.dictionary_definitions:
+            match = re.fullmatch(r"colloquial pr\. (\[[^\[\]]+\](?: or \[[^\[\]]+\])*)", definition)
+            if match is None:
+                continue
+            for value in re.findall(r"\[([^\[\]]+)\]", match.group(1)):
+                if value == source_readings[0].strict:
+                    attestations.append((definition, value))
+        if len(attestations) != 1:
+            return None
+
+        definition, reading = attestations[0]
+        return {
+            "source_reference": reference,
+            "dictionary_colloquial_definition": definition,
+            "attested_source_reading": reading,
+        }
+
+    context_by_pair_id = select_unique_pair_contexts_by_source(working_pairs, context_for_pair)
+    return split_pairs_by_selected_ids(
+        working_pairs,
+        set(context_by_pair_id),
+        bucket=bucket,
+        matching_rule=matching_rule,
+        context_by_pair_id=context_by_pair_id,
+        context_name="source_see_colloquial_pr",
+    )
+
+
 def match_unique_pinyin_kind_pairs(
     working_pairs: list[HskMatchingPair],
     *,
@@ -871,6 +942,21 @@ HTML_SUBFORM_DEFINITION_COVER_UNIQUE_RULE = MatchingRuleDefinition(
     ),
     selected_pair="all pairs in the source form whose dictionary forms are covered by xiehanzi HTML subentries",
     handler=match_html_subform_definition_cover_pairs,
+)
+SOURCE_SEE_COLLOQUIAL_PR_UNIQUE_RULE = MatchingRuleDefinition(
+    name="source_see_colloquial_pr_unique",
+    scope="pair_pipeline",
+    requires=(
+        "No higher-priority pair-pipeline step consumed this source form",
+        "The source has exactly one dictionary candidate with identical Simplified and a different single reading",
+        "The source HTML contains exactly two Pinyin/definition blocks covering all source definitions: one for "
+        "the source reading and one for the dictionary reading, matched with strict numbered preserve-case equality",
+        "The source-reading block contains only the exact see Simplified[dictionary Pinyin] reference",
+        "Exactly one bracketed numbered reading in standalone colloquial pr. [reading] (or [reading]) definitions "
+        "equals the source reading converted to strict numbered preserve-case Pinyin",
+    ),
+    selected_pair="the sole dictionary candidate with a reciprocal source-reference/colloquial-reading link",
+    handler=match_source_see_colloquial_pr_pairs,
 )
 DEFAULT_UNRESOLVED_RULE = MatchingRuleDefinition(
     name="default_unresolved",
