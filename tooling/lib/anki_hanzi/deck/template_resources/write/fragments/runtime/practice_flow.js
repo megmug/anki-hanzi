@@ -4,7 +4,6 @@
       restoreQuizScoreDisplay();
       generateHanziOnFinishQuiz("unset", true);
       if (!p) {
-        showNextAndRevealBtn(false);
         return;
       }
     } else {
@@ -87,58 +86,6 @@
 
     observeWriterSize(hanziWriterList);
 
-    var revealClickCount = 0;
-    var goNextButton = document.getElementById("btnGoNextCard");
-    if (goNextButton) {
-      goNextButton.onclick = function () {
-        revealClickCount = 0;
-        var currentIndex = getCurrentHanziNum();
-        var writer = hanziWriterList[currentIndex];
-        if (writer) {
-          quizScore.markAssist();
-          writer.showOutline();
-          writer.showCharacter();
-          cardRuntime.timeout(function () {
-            onFinishQuizDrawHanzi();
-          }, 800);
-          cardRuntime.timeout(function () {
-            showNextHanzi();
-          }, 1000);
-        } else {
-          onFinishQuizDrawHanzi();
-          showNextHanzi();
-        }
-      };
-    }
-
-    var revealButton = document.getElementById("btnRevealChar");
-    if (revealButton) {
-      revealButton.onclick = function () {
-        var currentIndex = getCurrentHanziNum();
-        var writer = hanziWriterList[currentIndex];
-        if (!writer) {
-          onFinishQuizDrawHanzi();
-          showNextHanzi();
-          return;
-        }
-        quizScore.markAssist();
-        writer.showOutline();
-        if (revealClickCount == 0) {
-          writer.animateCharacter();
-        } else if (revealClickCount == 1) {
-          writer.showCharacter();
-        } else if (revealClickCount == 2) {
-          writer.hideCharacter();
-          writer.hideOutline();
-          writerQuiz(writer, currentIndex);
-        } else {
-          revealClickCount = -1;
-          writerQuiz(writer, currentIndex);
-        }
-        revealClickCount++;
-      };
-    }
-
     var hintButton = document.getElementById("btnHintStroke");
     if (hintButton) {
       hintButton.onclick = function () {
@@ -171,7 +118,6 @@
         },
         onComplete: function (summaryData) {
           onFinishQuizDrawHanzi();
-          revealClickCount = 0;
 
           cardRuntime.timeout(function () {
             showNextHanzi();
@@ -249,12 +195,6 @@
     if (WRITE_SETTINGS.show_pinyin) {
       showHide(".pinyin", true);
     }
-    showNextAndRevealBtn(false);
-  }
-
-  function showNextAndRevealBtn(show) {
-    showHide("#btnGoNextCard", show, "inline-flex");
-    showHide("#btnRevealChar", show, "inline-flex");
   }
 
   doPractice();

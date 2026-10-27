@@ -87,13 +87,11 @@
 
   function createQuizScoreTracker(characterCount) {
     var mistakePenaltyStrokeRatio = 0.8;
-    var revealAssistPenalty = 20;
     var hintPenaltyStrokeRatio = 1.2;
     var totalStrokesByChar = [];
     var correctStrokesByChar = [];
     var hintedStrokes = {};
     var mistakes = 0;
-    var revealAssists = 0;
     var hintAssists = 0;
     var isComplete = false;
 
@@ -118,19 +116,16 @@
       var baseScore = totalStrokes ? (correctStrokes / totalStrokes) * 100 : 0;
       var pointsPerStroke = totalStrokes ? 100 / totalStrokes : 0;
       var mistakePenalty = pointsPerStroke * mistakePenaltyStrokeRatio;
-      var assistPenalty =
-        revealAssists * revealAssistPenalty +
-        hintAssists * pointsPerStroke * hintPenaltyStrokeRatio;
-      var assists = revealAssists + hintAssists;
+      var hintPenalty = hintAssists * pointsPerStroke * hintPenaltyStrokeRatio;
       var score = clampScore(
-        baseScore - mistakes * mistakePenalty - assistPenalty,
+        baseScore - mistakes * mistakePenalty - hintPenalty,
       );
       var state = {
         score: score,
         correctStrokes: correctStrokes,
         totalStrokes: totalStrokes,
         mistakes: mistakes,
-        assists: assists,
+        assists: hintAssists,
         isComplete: isComplete,
       };
 
@@ -154,10 +149,6 @@
       },
       markMistake: function () {
         mistakes++;
-        updateDisplay();
-      },
-      markAssist: function () {
-        revealAssists++;
         updateDisplay();
       },
       markComplete: function () {

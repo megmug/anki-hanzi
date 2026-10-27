@@ -213,11 +213,10 @@ def render_icon(name: str) -> str:
     return f'<span class="material-symbols-outlined" aria-hidden="true">{name}</span>'
 
 
-def render_tool_button(button_id: str, icon: str, label: str, *, hidden: bool = False) -> str:
-    style = ' style="display: none"' if hidden else ""
+def render_tool_button(button_id: str, icon: str, label: str) -> str:
     return (
         f'<button type="button" class="card-tool tappable" id="{button_id}"'
-        f' title="{label}" aria-label="{label}"{style}>{render_icon(icon)}</button>'
+        f' title="{label}" aria-label="{label}">{render_icon(icon)}</button>'
     )
 
 
@@ -402,8 +401,6 @@ def render_write_front_template(resource_dir: Path) -> str:
     tools = "\n".join(
         (
             render_tool_button("btnHintStroke", "lightbulb", "Hint: next stroke"),
-            render_tool_button("btnRevealChar", "gesture", "Show character", hidden=True),
-            render_tool_button("btnGoNextCard", "navigate_next", "Next character", hidden=True),
             render_tool_button("btnPlayAudio", "volume_up", "Play audio"),
             render_tool_button("btnMoreOptions", "more_horiz", "Dictionary links"),
         )
