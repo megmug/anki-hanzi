@@ -77,6 +77,8 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
             "stroke_width": 64,
             "hint_after_misses": 0,
             "stroke_leniency": 0.8,
+            "accept_backwards_strokes": False,
+            "hint_animation_speed": 0.5,
         },
         "back": {
             "show_pinyin": True,
@@ -89,6 +91,14 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
             "stroke_width": 64,
             "hint_after_misses": 0,
             "stroke_leniency": 0.8,
+            "accept_backwards_strokes": False,
+            "hint_animation_speed": 0.5,
+        },
+        "scoring": {
+            "mistake_penalty_stroke_ratio": 0.8,
+            "hint_penalty_stroke_ratio": 1.2,
+            "hard_min_score": 60,
+            "good_min_score": 75,
         },
     },
 }
@@ -269,6 +279,14 @@ def normalize_card_setting(value: Any, field_name: str) -> Any:
         return parse_int(value, field_name, 0, 10)
     if field_name.endswith(".stroke_leniency"):
         return parse_float(value, field_name, 0.1, 2.0)
+    if field_name.endswith(".hint_animation_speed"):
+        return parse_float(value, field_name, 0.1, 5.0)
+    if field_name.endswith((".mistake_penalty_stroke_ratio", ".hint_penalty_stroke_ratio")):
+        return parse_float(value, field_name, 0.0, 5.0)
+    if field_name.endswith(".hard_min_score"):
+        return parse_int(value, field_name, 0, 99)
+    if field_name.endswith(".good_min_score"):
+        return parse_int(value, field_name, 1, 100)
     return parse_bool(value, field_name)
 
 
@@ -287,15 +305,19 @@ def merge_card_settings(
             raise ValueError(f"deck config card_settings has unknown card type: {card_type}")
         if not isinstance(card_settings, dict):
             raise ValueError(f"deck config card_settings.{card_type} must be an object")
-        for side, side_settings in card_settings.items():
-            if side not in settings[card_type]:
-                raise ValueError(f"deck config card_settings.{card_type} has unknown side: {side}")
-            if not isinstance(side_settings, dict):
-                raise ValueError(f"deck config card_settings.{card_type}.{side} must be an object")
-            for key, value in side_settings.items():
-                if key not in settings[card_type][side]:
-                    raise ValueError(f"deck config card_settings.{card_type}.{side} has unknown setting: {key}")
-                field_name = f"card_settings.{card_type}.{side}.{key}"
-                settings[card_type][side][key] = normalize_card_setting(value, field_name)
+        for section, section_settings in card_settings.items():
+            if section not in settings[card_type]:
+                raise ValueError(f"deck config card_settings.{card_type} has unknown section: {section}")
+            if not isinstance(section_settings, dict):
+                raise ValueError(f"deck config card_settings.{card_type}.{section} must be an object")
+            for key, value in section_settings.items():
+                if key not in settings[card_type][section]:
+                    raise ValueError(f"deck config card_settings.{card_type}.{section} has unknown setting: {key}")
+                field_name = f"card_settings.{card_type}.{section}.{key}"
+                settings[card_type][section][key] = normalize_card_setting(value, field_name)
+
+    scoring = settings["Write"]["scoring"]
+    if scoring["hard_min_score"] >= scoring["good_min_score"]:
+        raise ValueError("deck config card_settings.Write.scoring requires hard_min_score < good_min_score")
 
     return settings

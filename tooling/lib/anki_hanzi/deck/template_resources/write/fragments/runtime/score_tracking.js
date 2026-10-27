@@ -1,3 +1,5 @@
+  var SCORE_SETTINGS = window.HANZI_CARD_SETTINGS.scoring;
+
   function getQuizScoreSuggestion(state) {
     var score = Number(state.score) || 0;
     var isPerfect =
@@ -9,10 +11,10 @@
     if (isPerfect) {
       return { label: "Easy", className: "xh-score-easy" };
     }
-    if (score >= 75) {
+    if (score >= SCORE_SETTINGS.good_min_score) {
       return { label: "Good", className: "xh-score-good" };
     }
-    if (score >= 60) {
+    if (score >= SCORE_SETTINGS.hard_min_score) {
       return { label: "Hard", className: "xh-score-hard" };
     }
     return { label: "Again", className: "xh-score-again" };
@@ -86,8 +88,8 @@
   }
 
   function createQuizScoreTracker(characterCount) {
-    var mistakePenaltyStrokeRatio = 0.8;
-    var hintPenaltyStrokeRatio = 1.2;
+    var mistakePenaltyStrokeRatio = SCORE_SETTINGS.mistake_penalty_stroke_ratio;
+    var hintPenaltyStrokeRatio = SCORE_SETTINGS.hint_penalty_stroke_ratio;
     var totalStrokesByChar = [];
     var correctStrokesByChar = [];
     var hintedStrokes = {};
