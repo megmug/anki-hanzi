@@ -1,34 +1,15 @@
 {
-  system ? builtins.currentSystem,
+  pkgs,
+  buildRevision,
+  checkoutRoot,
   cudaTorchVersion ? "2.12.0",
   cudaTorchIndexUrl ? "https://download.pytorch.org/whl/cu130",
-  buildId ? null,
   writeDiagnosticDatabases ? false,
-  pkgs ? import (builtins.fetchGit {
-    url = "https://github.com/nixos/nixpkgs/";
-    ref = "nixos-26.05";
-    rev = "1f607aa79b6356ed45d3cd3c8079c196e79efa2c";
-  }) { inherit system; },
 }:
 
 let
-  gitHeadPath = ./.git/HEAD;
-  gitHead =
-    if builtins.pathExists gitHeadPath then pkgs.lib.trim (builtins.readFile gitHeadPath) else "";
-  gitHeadRef =
-    if pkgs.lib.hasPrefix "ref: " gitHead then pkgs.lib.removePrefix "ref: " gitHead else "";
-  gitHeadRefPath = ./.git + "/${gitHeadRef}";
-  gitCommit =
-    if buildId != null then
-      buildId
-    else if gitHeadRef != "" && builtins.pathExists gitHeadRefPath then
-      pkgs.lib.trim (builtins.readFile gitHeadRefPath)
-    else if gitHead != "" && !(pkgs.lib.hasPrefix "ref: " gitHead) then
-      gitHead
-    else
-      "unknown";
-  resolvedBuildId = if gitCommit == "unknown" then "unknown" else builtins.substring 0 7 gitCommit;
-  deckConfigPath = ./deck_inputs/deck_config.json;
+  resolvedBuildId = builtins.substring 0 7 buildRevision;
+  deckConfigPath = ../deck_inputs/deck_config.json;
   deckConfig =
     if builtins.pathExists deckConfigPath then
       builtins.fromJSON (builtins.readFile deckConfigPath)
@@ -174,7 +155,7 @@ let
     );
 
   yarnOfflineCache = pkgs.fetchYarnDeps {
-    yarnLock = ./yarn.lock;
+    yarnLock = ../yarn.lock;
     hash = "sha256-wasqEk25KjOyWe8b8FN5OFqFhqE41UD6+6w+0Qxmkvc=";
   };
 
@@ -185,7 +166,7 @@ let
     sha256 = "0xy6dnrf1ijkipcfc5lnz87zfjcj2m8m2dmvgb328hakngq3yzjd";
   };
 
-  root = toString ./.;
+  root = toString ../.;
   relPath =
     path:
     let
@@ -195,7 +176,7 @@ let
 
   localBuildSource = pkgs.lib.cleanSourceWith {
     name = "anki-hanzi-local-build-source";
-    src = ./.;
+    src = ../.;
     filter =
       path: type:
       let
@@ -209,6 +190,7 @@ let
           ".backup"
           ".codex"
           ".config"
+          ".direnv"
           ".git"
           ".npm-cache"
           ".yarn-cache"
@@ -239,18 +221,19 @@ let
   };
   gitMetadataSource = pkgs.lib.cleanSourceWith {
     name = "anki-hanzi-git-metadata";
-    src = ./.;
+    src = checkoutRoot;
     filter =
       path: type:
       let
-        rel = relPath path;
+        rel = pkgs.lib.removePrefix (toString checkoutRoot + "/") (toString path);
       in
       (type == "directory" || type == "regular" || type == "symlink")
       && (
-        rel == ""
+        toString path == toString checkoutRoot
         || rel == ".git"
         || rel == ".git/HEAD"
         || rel == ".git/packed-refs"
+        || rel == ".git/shallow"
         || rel == ".git/refs"
         || pkgs.lib.hasPrefix ".git/refs/" rel
         || rel == ".git/objects"
@@ -264,14 +247,27 @@ let
         src = gitMetadataSource;
       }
       ''
-        if git -c safe.directory="$src" -C "$src" rev-parse --git-dir >/dev/null 2>&1; then
-          if ! git -c safe.directory="$src" -C "$src" rev-list --first-parent --reverse --abbrev-commit --abbrev=7 "${gitCommit}" > "$out"; then
-            printf '%s\n' "${resolvedBuildId}" > "$out"
-          fi
-        else
-          printf '%s\n' "${resolvedBuildId}" > "$out"
+        if [ -s "$src/.git/shallow" ]; then
+          echo "The migrator requires the complete local Git history, not a shallow clone." >&2
+          exit 1
         fi
+        git -c safe.directory="$src" -C "$src" rev-list \
+          --first-parent --reverse --abbrev-commit --abbrev=7 \
+          "${buildRevision}" > "$out"
       '';
+
+  buildTools = with pkgs; [
+    nodejs_26
+    pythonEnv
+    pkg-config
+    gnumake
+    espeak-ng
+    ffmpeg
+    nixfmt
+    prettier
+    ruff
+    treefmt
+  ];
 
   hanzi-apkg = pkgs.stdenvNoCC.mkDerivation {
     pname = "anki-hanzi-custom-apkg";
@@ -279,19 +275,7 @@ let
     src = localBuildSource;
     inherit yarnOfflineCache;
 
-    nativeBuildInputs = with pkgs; [
-      nodejs_26
-      yarnConfigHook
-      pythonEnv
-      pkg-config
-      gnumake
-      espeak-ng
-      ffmpeg
-      nixfmt
-      prettier
-      ruff
-      treefmt
-    ];
+    nativeBuildInputs = buildTools ++ [ pkgs.yarnConfigHook ];
 
     # Allow network access during audio builds so Kokoro can download
     # HuggingFace model weights.
@@ -301,11 +285,6 @@ let
     configurePhase = ''
       runHook preConfigure
       runHook postConfigure
-    '';
-
-    shellHook = ''
-      export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
-      export npm_config_cache="$PWD/.npm-cache"
     '';
 
     buildPhase = ''
@@ -470,4 +449,16 @@ let
   };
 in
 
-hanzi-apkg
+{
+  package = hanzi-apkg;
+  devShell = pkgs.mkShell {
+    packages = buildTools ++ [
+      pkgs.yarn
+      pkgs.git
+    ];
+    shellHook = ''
+      export YARN_CACHE_FOLDER="$PWD/.yarn-cache"
+      export npm_config_cache="$PWD/.npm-cache"
+    '';
+  };
+}

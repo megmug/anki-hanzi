@@ -5,18 +5,20 @@ This directory contains the Python build pipeline, project utilities, and shared
 Run the full build with:
 
 ```sh
-nix-build
+nix build --impure
 ```
 
 ## Build
 
-`default.nix` invokes one build entry point during the normal APKG build.
+The flake's deck derivation in `nix/project.nix` invokes one build entry point during the normal APKG build.
+Run builds from the repository root: `--impure` supplies local Git history for the migrator's BuildIDs.
+The devShell (`nix develop`, or direnv's `use flake`) uses the same dependencies without reading that history.
 
 - `build/generate_hanzi_deck.py`: build the typed lexicon state, generate the APKG, and package the migrator add-on.
   The build writes one stage-oriented `build_reports/build_report.json` with source, enrichment, matching, selection,
   audio, HanziWriter, and package summaries.
   Full diagnostic lexicon JSON dumps are off by default; pass `--master-db-output` and/or `--enriched-db-output`
-  when running the CLI directly, or build with `nix-build --arg writeDiagnosticDatabases true` to include them under
+  when running the CLI directly, or build with `nix build --impure .#with-diagnostics` to include them under
   `result/diagnostics/`.
 
 ## Utilities
@@ -33,7 +35,7 @@ These programs are run manually for maintenance, analysis, or upgrades.
 
 ## Formatting
 
-Run `nix-shell --run "treefmt"` to format maintained Python and Nix code.
+Run `nix develop --command treefmt` to format maintained Python and Nix code.
 Treefmt uses Ruff for Python and nixfmt for Nix.
 Vendored deck inputs are excluded.
 

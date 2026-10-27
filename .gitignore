@@ -1,5 +1,6 @@
 # Dependencies
 /node_modules
+/.direnv
 
 # Generated files
 __pycache__/

@@ -41,27 +41,41 @@ To start, either choose a recent release and download the deck from GitHub Relea
 
 System requirements:
 - Linux or macOS (on Windows, you will need to use WSL2)
-- Nix package manager
+- Nix 2.27 or newer, with `nix-command` and `flakes` enabled
 
 After cloning the repo, initialize submodules first:
 ```sh
 git submodule update --init --recursive
 ```
 
-Then build the APKG with Nix:
+Then build the APKG from the repository root:
 ```sh
-nix-build
+nix build --impure
 ```
 
+The Nixpkgs revision is pinned in `flake.lock`. The HSK submodule is included automatically by the flake.
+`--impure` lets the build read the checkout's local Git metadata so the migrator retains its complete
+first-parent BuildID history. It does not update dependencies or contact Git remotes.
+Use a full Git checkout, not a shallow clone or source archive, and add new source files to Git before building.
+
 On a Linux machine with an NVIDIA GPU and `audio.engine` set to `kokoro`, Nix probes for a usable CUDA driver and can install CUDA-capable PyTorch into the build's isolated temporary `pip` prefix.
-If no NVIDIA driver is available, or on macOS, the build uses CPU PyTorch.
+If no NVIDIA driver is available, the build uses CPU PyTorch. On macOS, use `audio.engine=off` or `edge_tts`; the pinned Kokoro dependencies do not support Darwin.
 Audio builds that need network access for model downloads may require a relaxed Nix sandbox configuration.
 
-`nix-build` creates the default `result` symlink.
+`nix build` creates the default `result` symlink.
 The build result contains the hash-named APKG, a matching hash-named migrator add-on, and one stage-oriented `build_report.json`.
+
+### Development Environment
+
+Run `nix develop` for a shell with the same Python dependencies and build tools, plus formatters.
+With direnv installed and hooked into your shell, run `direnv allow` once in the repository root.
+The committed `.envrc` uses `use flake` to load the devShell automatically.
+The development shell does not need `--impure`; only the deck build reads local Git history.
 
 ## Repository Layout
 
+- `flake.nix` / `flake.lock`: pinned Nix dependency, build outputs, and devShell.
+- `nix/project.nix`: shared build dependencies, deck derivation, and development environment.
 - `deck_inputs/`: committed source inputs for the deck build, including the deck config, pinned CC-CEDICT snapshot, and HSK/xiehanzi word-list submodule.
 - `tooling/`: Python build, utility, shared helper, and card-template code.
 - `.github/workflows/`: CI build workflow that runs the Nix build, uploads artifacts, and generates releases.
@@ -73,11 +87,11 @@ The build uses the committed CC-CEDICT snapshot.
 To update that snapshot, run:
 
 ```sh
-nix-shell --run "python tooling/utilities/update_cc_cedict_snapshot.py"
+nix develop --command python tooling/utilities/update_cc_cedict_snapshot.py
 ```
 
 Run this from the project root.
-Then run `nix-build`, review the changed data and generated APKG, and commit the updated snapshot only if the change is intended.
+Then run `nix build --impure`, review the changed data and generated APKG, and commit the updated snapshot only if the change is intended.
 
 ## Migrating from a Previous Version
 
@@ -86,7 +100,7 @@ Install that add-on in Anki when you want to migrate an existing Hanzi deck to t
 
 ### How to migrate
 
-1. **Build the new artifacts**: run `nix-build` in this repo and keep the `result/` symlink, or download the APKG and matching migrator add-on from GitHub Releases.
+1. **Build the new artifacts**: run `nix build --impure` in this repo and keep the `result/` symlink, or download the APKG and matching migrator add-on from GitHub Releases.
 2. **Install the migrator add-on**: in Anki, install the generated `.ankiaddon` file.
 3. **Backup your Anki collection**: export a full `.colpkg` from the profile that contains your current deck.
 4. **Run the migrator**: use *Tools → Anki Hanzi Migrator → Migrate Deck...*, select the existing deck root, and choose the target APKG.

@@ -5,12 +5,12 @@ deck build.
 
 The upstream MDBG export URL is mutable, so the build vendors the exact
 CC-CEDICT text file needed for reproducible APKG generation instead of
-downloading the latest file during `nix-build`.
+downloading the latest file during `nix build`.
 
 To update the snapshot from the latest upstream export, run:
 
 ```sh
-nix-shell --run "python tooling/utilities/update_cc_cedict_snapshot.py"
+nix develop --command python tooling/utilities/update_cc_cedict_snapshot.py
 ```
 
 The update command downloads the current archive from the URL below, validates

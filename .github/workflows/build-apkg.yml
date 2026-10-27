@@ -29,11 +29,11 @@ jobs:
         uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
-            experimental-features = nix-command
+            experimental-features = nix-command flakes
             sandbox = false
 
       - name: Build APKG package
-        run: nix-build --out-link result --argstr buildId "${GITHUB_SHA}"
+        run: nix build --impure --out-link result --print-build-logs
 
       - name: Define release metadata
         id: release_meta

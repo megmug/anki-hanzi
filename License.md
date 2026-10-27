@@ -65,7 +65,7 @@ Copyright (c) 2018 Simon Lammer.
 ## Google Material Symbols and Material Design Icons
 
 The card templates bundle `_MaterialSymbolsOutlined.woff2`, fetched at build
-time from the pinned `google/material-design-icons` revision in `default.nix`.
+time from the pinned `google/material-design-icons` revision in `nix/project.nix`.
 
 Google Material Symbols and Material Design Icons are licensed under the Apache
 License, Version 2.0.
