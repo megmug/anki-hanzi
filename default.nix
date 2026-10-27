@@ -7,7 +7,7 @@
   pkgs ? import (builtins.fetchGit {
     url = "https://github.com/nixos/nixpkgs/";
     ref = "nixos-26.05";
-    rev = "78e9c786dc08cd4f3420c2395cd977206a9b1da2";
+    rev = "1f607aa79b6356ed45d3cd3c8079c196e79efa2c";
   }) { inherit system; },
 }:
 
