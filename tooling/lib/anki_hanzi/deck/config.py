@@ -77,10 +77,10 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, Any]] = {
         "stroke_leniency": 0.8,
         "accept_backwards_strokes": False,
         "hint_animation_speed": 0.5,
-        "mistake_penalty_stroke_ratio": 0.8,
-        "hint_penalty_stroke_ratio": 1.2,
-        "hard_min_score": 60,
-        "good_min_score": 75,
+        "mistake_penalty_stroke_ratio": 1.0,
+        "hint_penalty_stroke_ratio": 2.0,
+        "hard_min_score": 65,
+        "good_min_score": 80,
     },
 }
 

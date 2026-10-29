@@ -154,10 +154,10 @@ Write settings:
 - `stroke_leniency`: number from `0.1` to `2.0`, default `0.8`. Lower is stricter, higher is more forgiving. This scales Hanzi Writer's stroke-matching tolerances, not the score penalty. Try small changes around `0.8` or `1.0` first.
 - `accept_backwards_strokes`: boolean, default `false`. When `true`, an otherwise matching stroke may be drawn in the reverse direction. Stroke order is still required.
 - `hint_animation_speed`: number from `0.1` to `5.0`, default `0.5`. Smaller values show the hint more slowly. This changes timing only, not the hint penalty.
-- `mistake_penalty_stroke_ratio`: number from `0` to `5`, default `0.8`. Deduction per rejected stroke, as a multiple of one stroke's score value.
-- `hint_penalty_stroke_ratio`: number from `0` to `5`, default `1.2`. Deduction per hinted stroke, as a multiple of one stroke's score value.
-- `hard_min_score`: integer from `0` to `99`, default `60`. Minimum score for the `Hard` suggestion.
-- `good_min_score`: integer from `1` to `100`, default `75`. Minimum score for the `Good` suggestion. Must be greater than `hard_min_score`.
+- `mistake_penalty_stroke_ratio`: number from `0` to `5`, default `1.0`. Deduction per rejected stroke, as a multiple of one stroke's score value.
+- `hint_penalty_stroke_ratio`: number from `0` to `5`, default `2.0`. Deduction per hinted stroke, as a multiple of one stroke's score value.
+- `hard_min_score`: integer from `0` to `99`, default `65`. Minimum score for the `Hard` suggestion.
+- `good_min_score`: integer from `1` to `100`, default `80`. Minimum score for the `Good` suggestion. Must be greater than `hard_min_score`.
 
 Practice options map to the pinned [Hanzi Writer API](https://hanziwriter.org/docs.html#api).
 Automatic acceptance after repeated mistakes remains disabled: a stroke must still match.
@@ -178,7 +178,7 @@ score = round(100 * C/N
 The result is limited to `0` through `100`; no loaded strokes means a base score of `0`.
 Manual and automatic hints share the same counter: each stroke is charged only once, even if hinted repeatedly.
 A mistake that triggers an automatic hint incurs both deductions.
-With ten total strokes and the defaults, one mistake costs eight points and one hinted stroke costs twelve points.
+With ten total strokes and the defaults, one mistake costs ten points and one hinted stroke costs twenty points.
 Setting a penalty to `0` removes that deduction, but the mistake or hint is still recorded.
 
 `Easy` remains reserved for a score of `100` with every stroke completed and no mistakes or assists.
@@ -207,10 +207,10 @@ Example `card_settings` override:
       "stroke_leniency": 0.8,
       "accept_backwards_strokes": false,
       "hint_animation_speed": 0.5,
-      "mistake_penalty_stroke_ratio": 0.8,
-      "hint_penalty_stroke_ratio": 1.2,
-      "hard_min_score": 60,
-      "good_min_score": 75
+      "mistake_penalty_stroke_ratio": 1.0,
+      "hint_penalty_stroke_ratio": 2.0,
+      "hard_min_score": 65,
+      "good_min_score": 80
     }
   }
 }
