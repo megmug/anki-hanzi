@@ -1,11 +1,9 @@
-  function doPractice(p = false) {
+  function doPractice() {
     disposeWriters(practiceWriters);
     if (document.getElementById("back")) {
       restoreQuizScoreDisplay();
       generateHanziOnFinishQuiz("unset", true);
-      if (!p) {
-        return;
-      }
+      return;
     } else {
       generateHanziOnFinishQuiz("none");
     }
@@ -116,7 +114,7 @@
         onCorrectStroke: function (data) {
           quizScore.markCorrectStroke(characterIndex, data);
         },
-        onComplete: function (summaryData) {
+        onComplete: function () {
           onFinishQuizDrawHanzi();
 
           cardRuntime.timeout(function () {
@@ -177,16 +175,14 @@
       return;
     }
 
-    if (i + 1 == len) {
-      disposeWriters(practiceWriters);
-      document.querySelector("#character-target-div").innerHTML = "";
-      document.getElementById("ch_load_status").style.display = "none";
-      generateHanziOnFinishQuiz("unset", true);
-      if (window.xhActiveQuizScore) {
-        window.xhActiveQuizScore.markComplete();
-      }
-      document.querySelector(".hanzi-card").classList.add("writer-complete");
+    disposeWriters(practiceWriters);
+    document.querySelector("#character-target-div").innerHTML = "";
+    document.getElementById("ch_load_status").style.display = "none";
+    generateHanziOnFinishQuiz("unset", true);
+    if (window.xhActiveQuizScore) {
+      window.xhActiveQuizScore.markComplete();
     }
+    document.querySelector(".hanzi-card").classList.add("writer-complete");
 
     showHide("#btnHintStroke", false);
     playAudio();
