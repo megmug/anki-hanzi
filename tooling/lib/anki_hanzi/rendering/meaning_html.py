@@ -7,7 +7,6 @@ import html
 from anki_hanzi.lexicon.definitions import (
     DefinitionItem,
     ErhuaVariantDefinition,
-    definition_display_texts,
     split_definition_text,
 )
 from anki_hanzi.lexicon import LexiconForm, LexiconWord
@@ -46,10 +45,6 @@ def colored_characters(value: str, pinyin: str) -> str:
 
     fallback_class = tone_class_from_numbered_syllable(syllables[0]) if syllables else "tone0"
     return "".join(f'<span class="{fallback_class}">{character}</span>' for character in characters)
-
-
-def rendered_definitions(form: LexiconForm) -> list[str]:
-    return definition_display_texts(form.definition_items)
 
 
 def render_definition_item(item: DefinitionItem) -> str:
@@ -104,34 +99,6 @@ def render_meaning_form(word: LexiconWord, form: LexiconForm) -> str:
         output.append(f"  <li>{definition}</li>")
     output.append(" </ul>  ")
     return "".join(output)
-
-
-def merge_meaning_forms(forms: list[LexiconForm]) -> LexiconForm:
-    if not forms:
-        return LexiconForm(pinyin="", definitions=[])
-
-    definitions: list[str] = []
-    pinyin_readings: list[str] = []
-    seen: set[str] = set()
-    for form in forms:
-        for reading in form.pinyin_readings or [form.pinyin]:
-            if reading not in pinyin_readings:
-                pinyin_readings.append(reading)
-        for definition in rendered_definitions(form):
-            if definition in seen:
-                continue
-            definitions.append(definition)
-            seen.add(definition)
-
-    return LexiconForm(pinyin=forms[0].pinyin, pinyin_readings=pinyin_readings, definitions=definitions)
-
-
-def render_meaning_group(word: LexiconWord, forms: list[LexiconForm]) -> str:
-    if not forms:
-        return ""
-    if len(forms) == 1:
-        return render_meaning_form(word, forms[0])
-    return render_meaning_form(word, merge_meaning_forms(forms))
 
 
 def render_meaning_html(word: LexiconWord) -> str:

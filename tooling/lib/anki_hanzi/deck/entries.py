@@ -10,7 +10,7 @@ from anki_hanzi.deck.config import DeckSelection
 from anki_hanzi.deck.identity import stable_note_id
 from anki_hanzi.lexicon import LexiconForm, LexiconState, LexiconWord
 from anki_hanzi.pinyin import numbered_to_display
-from anki_hanzi.rendering.meaning_html import render_meaning_group, render_meaning_html
+from anki_hanzi.rendering.meaning_html import render_meaning_form, render_meaning_html
 
 
 @dataclass(frozen=True)
@@ -263,7 +263,7 @@ def build_entries_from_state(
                 simplified=simplified,
                 pinyin=display_pinyin,
                 definition_html=rendered_definition_html,
-                meaning_definition_html=render_meaning_group(word, [meaning_form.form]),
+                meaning_definition_html=render_meaning_form(word, meaning_form.form),
                 audio_filename_primary=audio_filename_primary,
                 audio_filename_secondary=audio_filename_secondary,
                 tags=_note_tags(set(meaning_form.tags)),
