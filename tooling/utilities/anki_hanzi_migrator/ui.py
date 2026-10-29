@@ -31,20 +31,8 @@ from aqt.utils import showCritical, showInfo, showWarning
 
 from . import registry
 from .collection_guard import compare_unrelated_database, snapshot_unrelated_database
+from .handlers.base import report_item as _item
 from .routing import MigrationRoute, PlannedMigrationStep
-
-
-ADDON_DIR = Path(__file__).resolve().parent
-BUILD_INFO_PATH = ADDON_DIR / "build_info.json"
-
-
-def _build_info() -> dict[str, Any]:
-    if not BUILD_INFO_PATH.exists():
-        return {}
-    try:
-        return json.loads(BUILD_INFO_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
 
 
 def _json_text(data: Any) -> str:
@@ -57,15 +45,6 @@ def _copy_text(text: str) -> None:
 
 def _top_level_window():
     return mw if mw is not None else None
-
-
-def _item(status: str, title: str, detail: str, details: list[str] | None = None) -> dict[str, Any]:
-    return {
-        "status": status,
-        "title": title,
-        "detail": detail,
-        "details": details or [],
-    }
 
 
 def _badge_html(status: str) -> str:
@@ -667,7 +646,7 @@ def run_migration() -> None:
         showInfo("Migration cancelled. No changes were applied.")
         return
 
-    build_info = _build_info()
+    build_info = registry.read_build_info()
     title_suffix = f" ({build_info.get('build_id')})" if build_info.get("build_id") else ""
 
     for index, step in enumerate(route.steps, 1):
@@ -760,7 +739,7 @@ def run_migration() -> None:
 
 
 def show_about() -> None:
-    build_info = _build_info()
+    build_info = registry.read_build_info()
     build_id = build_info.get("build_id") or "unknown"
     known_build_ids = build_info.get("known_build_ids")
     known_count = len(known_build_ids) if isinstance(known_build_ids, list) else 0

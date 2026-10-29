@@ -26,7 +26,7 @@ DEFAULT_STRATEGIES = (
     ),
 )
 
-def _build_info() -> dict:
+def read_build_info() -> dict:
     if not BUILD_INFO_PATH.exists():
         return {}
     try:
@@ -36,7 +36,7 @@ def _build_info() -> dict:
 
 
 def known_build_ids() -> tuple[str, ...]:
-    build_info = _build_info()
+    build_info = read_build_info()
     raw_build_ids = build_info.get("known_build_ids")
     if isinstance(raw_build_ids, list):
         build_ids = [build_id for build_id in raw_build_ids if isinstance(build_id, str) and build_id]
