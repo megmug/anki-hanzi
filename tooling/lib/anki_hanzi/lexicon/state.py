@@ -151,13 +151,7 @@ class LexiconForm:
             seen.add(definition)
 
     def add_tags(self, tags: list[str]) -> None:
-        seen = set(self.tags)
-        for tag in normalized_tags(tags):
-            if tag in seen:
-                continue
-            self.tags.append(tag)
-            seen.add(tag)
-        self.tags.sort()
+        self.tags = normalized_tags(self.tags + tags)
 
     def to_json(self) -> dict[str, Any]:
         data = {
@@ -193,13 +187,7 @@ class LexiconWord:
         form.append_definitions(definitions)
 
     def add_tags(self, tags: list[str]) -> None:
-        seen = set(self.tags)
-        for tag in normalized_tags(tags):
-            if tag in seen:
-                continue
-            self.tags.append(tag)
-            seen.add(tag)
-        self.tags.sort()
+        self.tags = normalized_tags(self.tags + tags)
 
     def set_hanzi_frequency_once(self, frequency: int | None) -> None:
         if self.has_hanzi_frequency:
