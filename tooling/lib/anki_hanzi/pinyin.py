@@ -49,14 +49,7 @@ def strict_numbered_preserve_case(value: str) -> str:
     value = unicodedata.normalize("NFC", normalize_single_pinyin(value))
     if not value:
         return ""
-    if re.search(r"\d", value):
-        numbered = value
-    else:
-        try:
-            numbered = transcriptions.accented_to_numbered(value)
-        except ValueError:
-            numbered = value
-    return normalize_pinyin_u_variants(numbered)
+    return normalize_pinyin_u_variants(numbered_pinyin(value))
 
 
 def numbered_pinyin(value: str) -> str:
@@ -72,14 +65,7 @@ def numbered_pinyin_part(value: str) -> str:
     value = unicodedata.normalize("NFC", str(value or "").strip())
     if not value:
         return ""
-    if re.search(r"\d", value):
-        numbered = value
-    else:
-        try:
-            numbered = transcriptions.accented_to_numbered(value)
-        except ValueError:
-            numbered = value
-    return normalize_pinyin_u_variants(numbered)
+    return normalize_pinyin_u_variants(numbered_pinyin(value))
 
 
 def canonical_pinyin_readings(value: str) -> list[CanonicalPinyinReading]:
