@@ -63,10 +63,6 @@ def parse_definitions(values: list[str]) -> list[DefinitionItem]:
     return [parse_definition(value) for value in values]
 
 
-def definition_text(item: DefinitionItem) -> str:
-    return item.text
-
-
 def clone_definition_item(item: DefinitionItem, *, include_resolved: bool = True) -> DefinitionItem:
     if isinstance(item, PlainDefinition):
         return PlainDefinition(text=item.text)

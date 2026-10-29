@@ -9,7 +9,6 @@ from typing import Any
 from anki_hanzi.lexicon.definitions import (
     DefinitionItem,
     definition_item_to_json,
-    definition_text,
     parse_definitions,
 )
 from anki_hanzi.pinyin import normalize_single_pinyin, sorted_pinyin_readings, split_pinyin_readings
@@ -102,7 +101,6 @@ class LexiconEnrichmentMetadata:
 class LexiconForm:
     pinyin: str
     pinyin_readings: list[str] = field(default_factory=list)
-    definitions: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     definition_items: list[DefinitionItem] = field(default_factory=list)
 
@@ -112,13 +110,12 @@ class LexiconForm:
         all_readings = ([primary_reading] if primary_reading else []) + extra_readings
         self.pinyin = primary_reading or (extra_readings[0] if extra_readings else "")
         self.pinyin_readings = sorted_pinyin_readings(all_readings)
-        self.definitions = [str(definition) for definition in self.definitions]
-        if self.definition_items:
-            self.definition_items = list(self.definition_items)
-            self.definitions = [definition_text(item) for item in self.definition_items]
-        else:
-            self.definition_items = parse_definitions(self.definitions)
+        self.definition_items = list(self.definition_items)
         self.tags = normalized_tags(self.tags)
+
+    @property
+    def definitions(self) -> list[str]:
+        return [item.text for item in self.definition_items]
 
     def replace_pinyin(self, value: str) -> None:
         reading = normalize_single_pinyin(value)
@@ -150,7 +147,6 @@ class LexiconForm:
         for definition in definitions:
             if definition in seen:
                 continue
-            self.definitions.append(definition)
             self.definition_items.extend(parse_definitions([definition]))
             seen.add(definition)
 
