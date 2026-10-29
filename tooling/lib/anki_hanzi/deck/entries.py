@@ -17,11 +17,9 @@ from anki_hanzi.rendering.meaning_html import render_meaning_form, render_meanin
 class EnrichedWordEntry:
     simplified: str
     pinyin: str
-    definition_html: str
-    meaning_definition_html: str
+    meaning_html: str
     audio_filename_primary: str
     audio_filename_secondary: str
-    note_pinyin: str | None = None
     tags: tuple[str, ...] = ()
 
     @property
@@ -35,13 +33,11 @@ class EnrichedWordEntry:
         return (self.audio_filename_primary, self.audio_filename_secondary)
 
     def fields(self, card_type: str, build_id: str) -> list[str]:
-        note_pinyin = self.pinyin if self.note_pinyin is None else self.note_pinyin
-        note_id = stable_note_id(card_type, self.simplified, note_pinyin)
-        meaning_html = self.meaning_definition_html if card_type == "Meaning" else self.definition_html
+        note_id = stable_note_id(card_type, self.simplified, self.pinyin)
         return [
             self.simplified,
             self.pinyin,
-            meaning_html,
+            self.meaning_html,
             self.audio_ref,
             note_id,
             build_id,
@@ -231,11 +227,9 @@ def build_entries_from_state(
             word_level_entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_readings,
-                definition_html=rendered_definition_html,
-                meaning_definition_html=rendered_definition_html,
+                meaning_html=rendered_definition_html,
                 audio_filename_primary=audio_filename_primary,
                 audio_filename_secondary=audio_filename_secondary,
-                note_pinyin="",
                 tags=_note_tags(_word_tags(word, forms)),
             )
             pinyin_entries.append(word_level_entry)
@@ -262,8 +256,7 @@ def build_entries_from_state(
             entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_pinyin,
-                definition_html=rendered_definition_html,
-                meaning_definition_html=render_meaning_form(word, meaning_form.form),
+                meaning_html=render_meaning_form(word, meaning_form.form),
                 audio_filename_primary=audio_filename_primary,
                 audio_filename_secondary=audio_filename_secondary,
                 tags=_note_tags(set(meaning_form.tags)),

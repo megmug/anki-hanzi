@@ -19,14 +19,10 @@ def stable_hex_id(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
-def normalized_note_pinyin(value: str) -> str:
-    return " ".join(str(value or "").split()).casefold()
-
-
 def note_pinyin_id_key(card_type: str, pinyin: str) -> str:
     if card_type == "Meaning":
         return str(pinyin or "").strip()
-    return normalized_note_pinyin(pinyin)
+    return ""
 
 
 def stable_note_id(card_type: str, simplified: str, pinyin: str) -> str:
