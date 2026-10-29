@@ -8,7 +8,6 @@ from typing import Any
 
 from anki_hanzi.lexicon.definitions import (
     DefinitionItem,
-    definition_item_from_json,
     definition_item_to_json,
     definition_text,
     parse_definitions,
@@ -40,16 +39,6 @@ class LexiconSource:
             "comment_header": list(self.comment_header),
         }
 
-    @classmethod
-    def from_master_json(cls, data: dict[str, Any]) -> "LexiconSource":
-        return cls(
-            name=str(data.get("name") or ""),
-            url=str(data.get("url") or ""),
-            sha256=str(data.get("sha256") or ""),
-            path=Path(str(data.get("path") or "")),
-            comment_header=tuple(str(comment) for comment in data.get("comment_header", [])),
-        )
-
 
 @dataclass(frozen=True)
 class ParseSummary:
@@ -57,17 +46,6 @@ class ParseSummary:
     comments: int
     rejected_lines: int
     skipped_missing_ideograph_placeholder_entries: int
-
-    @classmethod
-    def from_master_json(cls, data: dict[str, Any]) -> "ParseSummary":
-        return cls(
-            source_entries=int(data.get("entries") or 0),
-            comments=int(data.get("comments") or 0),
-            rejected_lines=int(data.get("rejected_lines") or 0),
-            skipped_missing_ideograph_placeholder_entries=int(
-                data.get("skipped_missing_ideograph_placeholder_entries") or 0
-            ),
-        )
 
 
 @dataclass(frozen=True)
@@ -197,29 +175,6 @@ class LexiconForm:
             data["pinyin_readings"] = list(self.pinyin_readings)
         return data
 
-    def to_master_json(self) -> dict[str, Any]:
-        return self.to_json()
-
-    @classmethod
-    def from_master_json(cls, data: dict[str, Any]) -> "LexiconForm":
-        pinyin = data.get("pinyin") or ""
-        if isinstance(pinyin, list):
-            pinyin_readings = split_pinyin_readings(pinyin)
-            pinyin = pinyin_readings[0] if pinyin_readings else ""
-        else:
-            pinyin_readings = split_pinyin_readings(data.get("pinyin_readings", []))
-        return cls(
-            pinyin=str(pinyin),
-            pinyin_readings=pinyin_readings,
-            definitions=[str(value) for value in data.get("definitions", [])],
-            tags=[str(value) for value in data.get("tags", [])],
-            definition_items=[
-                definition_item_from_json(value)
-                for value in data.get("definition_items", [])
-                if isinstance(value, (dict, str))
-            ],
-        )
-
 
 @dataclass
 class LexiconWord:
@@ -240,14 +195,6 @@ class LexiconWord:
             self.forms[pinyin] = form
 
         form.append_definitions(definitions)
-
-    def add_form(self, form: LexiconForm) -> None:
-        key = form.pinyin
-        index = 1
-        while key in self.forms:
-            key = f"{form.pinyin}#{index}"
-            index += 1
-        self.forms[key] = form
 
     def add_tags(self, tags: list[str]) -> None:
         seen = set(self.tags)
@@ -291,32 +238,8 @@ class LexiconWord:
             data["hanzi"] = {"frequency": self.hanzi_frequency}
         return data
 
-    def to_master_json(self) -> dict[str, Any]:
-        return self.to_json()
-
     def to_enriched_json(self) -> dict[str, Any]:
         return self.to_json(include_enrichment=True, preserve_form_order=True)
-
-    @classmethod
-    def from_master_json(cls, data: dict[str, Any]) -> "LexiconWord":
-        word = cls(
-            simplified=str(data.get("simplified") or ""),
-            tags=[str(value) for value in data.get("tags", [])],
-            frequency_rank=(
-                int(data["frequency"]["rank"])
-                if isinstance(data.get("frequency"), dict) and data["frequency"].get("rank") is not None
-                else None
-            ),
-            hanzi_frequency=(
-                int(data["hanzi"]["frequency"])
-                if (isinstance(data.get("hanzi"), dict) and data["hanzi"].get("frequency") is not None)
-                else None
-            ),
-            has_hanzi_frequency=(isinstance(data.get("hanzi"), dict) and "frequency" in data["hanzi"]),
-        )
-        for form_data in data.get("forms", []):
-            word.add_form(LexiconForm.from_master_json(form_data))
-        return word
 
 
 @dataclass
@@ -385,19 +308,3 @@ class LexiconState:
                 "dropped_duplicates": list(self.hanzi_dropped_duplicates),
             },
         }
-
-    @classmethod
-    def from_master_json(cls, data: dict[str, Any]) -> "LexiconState":
-        words = {
-            word.simplified: word
-            for word in (LexiconWord.from_master_json(word_data) for word_data in data.get("words", []))
-        }
-        return cls(
-            schema=str(data.get("schema") or "hanzi-master-lexicon-cc-cedict-v3"),
-            source=LexiconSource.from_master_json(data.get("source", {})),
-            parse_summary=ParseSummary.from_master_json(data.get("summary", {})),
-            words=words,
-            hanzi_dropped_duplicates=list(data.get("hanzi", {}).get("dropped_duplicates", []))
-            if isinstance(data.get("hanzi"), dict)
-            else [],
-        )

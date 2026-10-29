@@ -112,29 +112,5 @@ def definition_item_to_json(item: DefinitionItem) -> dict[str, Any]:
             }
         )
         if item.resolved_definitions:
-            data["resolved_definitions"] = [
-                definition_item_to_json(child) for child in item.resolved_definitions
-            ]
+            data["resolved_definitions"] = [definition_item_to_json(child) for child in item.resolved_definitions]
     return data
-
-
-def definition_item_from_json(data: dict[str, Any] | str) -> DefinitionItem:
-    if isinstance(data, str):
-        return parse_definition(data)
-
-    text = str(data.get("text") or "").strip()
-    if data.get("kind") != "erhua_variant":
-        return PlainDefinition(text=text)
-
-    target = data.get("target") if isinstance(data.get("target"), dict) else {}
-    return ErhuaVariantDefinition(
-        text=text,
-        target_traditional=str(target.get("traditional") or ""),
-        target_simplified=str(target.get("simplified") or ""),
-        target_pinyin=str(target.get("pinyin") or ""),
-        resolved_definitions=[
-            definition_item_from_json(child)
-            for child in data.get("resolved_definitions", [])
-            if isinstance(child, (dict, str))
-        ],
-    )
