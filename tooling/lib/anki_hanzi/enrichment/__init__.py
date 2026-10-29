@@ -38,7 +38,6 @@ from anki_hanzi.lexicon import (
 
 @dataclass(frozen=True)
 class LexiconEnrichmentResult:
-    enriched: dict[str, Any]
     enrichment_report: dict[str, Any]
     matching_report: dict[str, Any]
 
@@ -47,7 +46,7 @@ def build_lexicon_enrichment_report(
     *,
     input_label: str,
     output_path: Path | None,
-    enriched: dict[str, Any],
+    summary: dict[str, Any],
     stages: tuple[EnrichmentStageResult, ...],
 ) -> dict[str, Any]:
     stage_reports = stage_reports_by_name(stages)
@@ -56,7 +55,7 @@ def build_lexicon_enrichment_report(
         "schema": "hanzi-enrichment-report-v1",
         "input": input_label,
         "output": str(output_path) if output_path is not None else None,
-        "summary": enriched["summary"],
+        "summary": summary,
         **stage_reports,
         "samples": hsk_report["samples"],
     }
@@ -91,34 +90,33 @@ def enrich_state(
         erhua_result,
     )
     summary = merge_stage_summaries(stage_results)
-    enrichment_metadata = LexiconEnrichmentMetadata(
-        name="hanzi lexicon enrichment",
-        fields=("hsk", "frequency", "yct", "bct", "erhua"),
-        hsk_data_dir=hsk_data_dir,
-        frequency_list=frequency_list_path,
-        frequency_tags=tuple(f"freq:top{threshold}" for threshold in TOP_FREQUENCY_THRESHOLDS),
-        yct_data_dir=yct_data_dir,
-        yct_tags=tuple(f"yct:{level}" for level in YCT_LEVELS),
-        bct_data_dir=bct_data_dir,
-        bct_tags=tuple(f"bct:{level}" for level in BCT_LEVELS),
-        dedupe_key=HANZI_DEDUPE_KEY,
-    )
-    enriched = master_state.to_enriched_json(
-        base=base_snapshot,
-        enrichment=enrichment_metadata,
-        summary=summary,
-    )
     report = build_lexicon_enrichment_report(
         input_label=input_label,
         output_path=output_path,
-        enriched=enriched,
+        summary=summary,
         stages=stage_results,
     )
 
     if output_path is not None:
+        enrichment_metadata = LexiconEnrichmentMetadata(
+            name="hanzi lexicon enrichment",
+            fields=("hsk", "frequency", "yct", "bct", "erhua"),
+            hsk_data_dir=hsk_data_dir,
+            frequency_list=frequency_list_path,
+            frequency_tags=tuple(f"freq:top{threshold}" for threshold in TOP_FREQUENCY_THRESHOLDS),
+            yct_data_dir=yct_data_dir,
+            yct_tags=tuple(f"yct:{level}" for level in YCT_LEVELS),
+            bct_data_dir=bct_data_dir,
+            bct_tags=tuple(f"bct:{level}" for level in BCT_LEVELS),
+            dedupe_key=HANZI_DEDUPE_KEY,
+        )
+        enriched = master_state.to_enriched_json(
+            base=base_snapshot,
+            enrichment=enrichment_metadata,
+            summary=summary,
+        )
         write_json(output_path, enriched)
     return LexiconEnrichmentResult(
-        enriched=enriched,
         enrichment_report=report,
         matching_report=hsk_result.matching_report,
     )

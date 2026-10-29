@@ -50,7 +50,6 @@ GENERATED_ZIP_MEMBERS = {"collection.anki2", "media"}
 class EnrichedStateBuildResult:
     state: LexiconState
     source_database_report: dict[str, Any]
-    enriched_lexicon: dict[str, Any]
     enrichment_report: dict[str, Any]
     matching_report: dict[str, Any]
 
@@ -229,9 +228,9 @@ def build_enriched_state(
         expected_sha256=manifest["sha256"],
     )
     state.sort_forms_by_pinyin()
-    master_json = state.to_master_json()
+    source_summary = state.summary()
     if master_db_output is not None:
-        write_json(master_db_output, master_json)
+        write_json(master_db_output, state.to_master_json())
 
     enrichment_result = enrich_state(
         master_state=state,
@@ -242,21 +241,20 @@ def build_enriched_state(
         yct_data_dir=yct_data_dir,
         bct_data_dir=bct_data_dir,
     )
-    source_report = dict(master_json["source"])
+    source_report = state.source.to_master_json()
     source_report["comment_header_lines"] = len(source_report.pop("comment_header", []))
     source_database_report = {
         "schema": state.schema,
         "snapshot_manifest": str(snapshot_manifest),
         "source_file": str(resolved_source_file),
         "source": source_report,
-        "summary": master_json["summary"],
+        "summary": source_summary,
     }
     if master_db_output is not None:
         source_database_report["diagnostic_output"] = str(master_db_output)
     return EnrichedStateBuildResult(
         state=state,
         source_database_report=source_database_report,
-        enriched_lexicon=enrichment_result.enriched,
         enrichment_report=enrichment_result.enrichment_report,
         matching_report=enrichment_result.matching_report,
     )
@@ -349,7 +347,6 @@ def build_package(
                 master_db_output=master_db_output,
                 enriched_db_output=enriched_db_output,
                 source_database_report=enriched_state_result.source_database_report,
-                enriched_lexicon=enriched_state_result.enriched_lexicon,
                 enrichment_report=enriched_state_result.enrichment_report,
                 matching_report=enriched_state_result.matching_report,
                 selection_report=selection_report,

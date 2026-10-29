@@ -21,7 +21,6 @@ class DeckBuildReportInput:
     master_db_output: Path | None
     enriched_db_output: Path | None
     source_database_report: dict[str, Any]
-    enriched_lexicon: dict[str, Any]
     enrichment_report: dict[str, Any]
     matching_report: dict[str, Any]
     selection_report: dict[str, Any]
@@ -111,7 +110,7 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
             "source_database": data.source_database_report,
             "lexicon_enrichment": {
                 "schema": data.enrichment_report["schema"],
-                "enriched_lexicon_schema": data.enriched_lexicon.get("schema"),
+                "enriched_lexicon_schema": data.source_schema,
                 "input": data.enrichment_report["input"],
                 "output": data.enrichment_report.get("output"),
                 "summary": enrichment_summary,
