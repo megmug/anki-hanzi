@@ -280,8 +280,6 @@ def build_package(
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None,
 ) -> dict[str, Any]:
     config = load_deck_config(deck_config_path)
-    if not config.selection.config_found:
-        raise ValueError("deck config file is required but not found")
     with temporary_build_workspace() as workspace:
         audio_generator = AudioGenerator(
             config.audio.engine,

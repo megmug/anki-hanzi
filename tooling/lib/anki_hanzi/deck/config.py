@@ -28,12 +28,10 @@ class DeckSelection:
     tags: tuple[str, ...] = ()
     individual_simplified: frozenset[str] = frozenset()
     config_path: str | None = None
-    config_found: bool = False
 
     def report(self) -> dict[str, Any]:
         return {
             "config_path": self.config_path,
-            "config_found": self.config_found,
             "mode": self.mode,
             "tags": list(self.tags),
             "individual_simplified": sorted(self.individual_simplified),
@@ -44,7 +42,6 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, Any]] = {
     "Meaning": {
         "front": {
             "show_pinyin": True,
-            "show_meaning": True,
             "show_simplified": True,
         },
         "back": {
@@ -55,8 +52,6 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, Any]] = {
     },
     "Pinyin": {
         "front": {
-            "show_pinyin": True,
-            "show_meaning": True,
             "show_simplified": True,
         },
         "back": {
@@ -155,7 +150,6 @@ def parse_deck_selection(raw: dict[str, Any], config_path: Path) -> DeckSelectio
             "individual_simplified",
         ),
         config_path=str(config_path),
-        config_found=True,
     )
 
 

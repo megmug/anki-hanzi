@@ -135,7 +135,16 @@ Only settings listed below are accepted.
 All settings are optional; omitted values keep their defaults. The checked-in Writer settings explicitly show the current defaults for experimentation.
 Settings for card types not included in `card_types` do not generate additional cards.
 
-Meaning and Pinyin settings:
+Meaning front settings:
+
+- `show_pinyin`: boolean, default `true`
+- `show_simplified`: boolean, default `true`
+
+Pinyin front settings:
+
+- `show_simplified`: boolean, default `true`
+
+Meaning and Pinyin back settings:
 
 - `show_pinyin`: boolean, default `true`
 - `show_meaning`: boolean, default `true`
