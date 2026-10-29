@@ -7,10 +7,7 @@ from pathlib import Path
 import genanki
 
 from anki_hanzi.deck.config import DeckConfig
-from anki_hanzi.deck.template_generation import FIELD_SPECS, HanziTemplateGenerator
-
-
-FIELDS = [field.to_genanki_field() for field in FIELD_SPECS]
+from anki_hanzi.deck.template_generation import HanziTemplateGenerator
 
 
 def create_models(config: DeckConfig | None = None, hw_data_bundle: Path | None = None) -> dict[str, genanki.Model]:
