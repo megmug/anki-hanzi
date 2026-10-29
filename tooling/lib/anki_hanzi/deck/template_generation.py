@@ -446,7 +446,7 @@ def render_basic_back_template(card_type: str, config: DeckConfig) -> str:
     showHide("#char_pinyin", settings.show_pinyin, "block");
     showHide("#char_meaning", settings.show_meaning, "block");
     showHide("#char_sim", settings.show_simplified, "block");
-    showHide(".pinyin", settings.show_pinyin);
+    showHide(".pinYinWrapper", settings.show_pinyin);
     showHide("#char-sim-id", settings.show_simplified);
   }
 
