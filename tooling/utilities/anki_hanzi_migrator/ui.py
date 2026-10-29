@@ -673,7 +673,7 @@ def run_migration() -> None:
             message="Review this step's preflight report. Apply is enabled only when the step is safe.",
             items=[_step_context_item(step, index, len(route.steps), step_apkg_path)]
             + step.handler.preflight_items(preflight["json"]),
-            report_text=preflight["text"],
+            report_text=preflight["text"] + "\n\n" + _json_text(preflight["json"]),
             primary_button_label="Apply Step" if preflight["can_apply"] else None,
         )
         dialog.exec()
@@ -713,8 +713,13 @@ def run_migration() -> None:
             }
         step_success = result["success"] and database_check["success"]
         report_text = ("MIGRATION STEP SUCCEEDED" if step_success else "MIGRATION STEP FAILED") + "\n\n"
+        report_text += result["text"] + "\n\n"
         report_text += _json_text(
-            {"success": step_success, "database_preservation": database_check, "handler_result": result}
+            {
+                "success": step_success,
+                "database_preservation": database_check,
+                "handler_result": {"success": result["success"], "json": result["json"]},
+            }
         )
         _copy_text(report_text)
 

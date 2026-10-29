@@ -1362,7 +1362,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
 
         return {
             "can_apply": not preflight["problems"],
-            "text": "\n".join(lines) + "\n\n" + _build_report_json(report_data),
+            "text": "\n".join(lines),
             "json": report_data,
         }
 
@@ -1743,8 +1743,7 @@ class CurrentDefaultMigration(MigrationStepHandler):
                 lines.append(
                     "state verification: all learned schedules/revlogs, default suspension, presets, and note types verified"
                 )
-            lines.append("Full JSON copied to clipboard")
-            report = "\n".join(lines) + "\n\n" + _build_report_json(report_data)
+            report = "\n".join(lines)
 
         except Exception:
             tb = traceback.format_exc()
@@ -1762,20 +1761,11 @@ class CurrentDefaultMigration(MigrationStepHandler):
                 pass
             report = "HANZI STATEFUL MIGRATION FAILED\n\n" + rollback_note + "\n\n" + tb
 
-        self._copy_report_to_clipboard(report)
         return {
             "success": bool(report_data and report_data.get("applied") and not report_data.get("verify_problems")),
             "text": report,
             "json": report_data,
         }
-
-    def _copy_report_to_clipboard(self, report: str) -> None:
-        try:
-            from aqt.qt import QApplication
-
-            QApplication.clipboard().setText(report)
-        except Exception:
-            pass
 
     def preflight_items(self, report_json: dict[str, Any]) -> list[ReportItem]:
         source = report_json.get("source", {})

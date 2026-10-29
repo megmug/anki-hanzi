@@ -26,11 +26,11 @@ class MigrationStepHandler(ABC):
 
     @abstractmethod
     def prepare_preflight(self, *, apkg_path: str, deck_root: str, target_preset_name: str) -> dict[str, Any]:
-        """Return structured preflight data for this migration step."""
+        """Return can_apply, a text summary, and separate json diagnostics."""
 
     @abstractmethod
     def apply(self, *, apkg_path: str, deck_root: str, target_preset_name: str) -> dict[str, Any]:
-        """Apply this migration step and return structured result data."""
+        """Apply the step; return success, a text summary, and separate json diagnostics."""
 
     @abstractmethod
     def preflight_items(self, report_json: dict[str, Any]) -> list[ReportItem]:
