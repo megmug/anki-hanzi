@@ -60,20 +60,6 @@ let
     doCheck = false;
   };
 
-  pinyin-tone-converter = pythonPackages.buildPythonPackage rec {
-    pname = "pinyin-tone-converter";
-    version = "1.0.2";
-    format = "setuptools";
-
-    src = pkgs.fetchPypi {
-      pname = "pinyin-tone-converter";
-      inherit version;
-      hash = "sha256-f0qq9EUT83Y4HMUzaK+rIDij8UEuLQqx2VwwKvWAJ9w=";
-    };
-
-    doCheck = false;
-  };
-
   proces = pythonPackages.buildPythonPackage rec {
     pname = "proces";
     version = "0.1.7";
@@ -129,7 +115,6 @@ let
       with ps;
       [
         colorize-pinyin
-        pinyin-tone-converter
         cn2an
         dragonmapper
         genanki
