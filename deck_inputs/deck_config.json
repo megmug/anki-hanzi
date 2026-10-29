@@ -25,19 +25,15 @@
   ],
   "card_settings": {
     "Write": {
-      "front": {
-        "stroke_leniency": 0.8,
-        "accept_backwards_strokes": false,
-        "hint_after_misses": 0,
-        "hint_animation_speed": 0.5,
-        "show_outline": false
-      },
-      "scoring": {
-        "mistake_penalty_stroke_ratio": 0.8,
-        "hint_penalty_stroke_ratio": 1.2,
-        "hard_min_score": 60,
-        "good_min_score": 75
-      }
+      "stroke_leniency": 0.8,
+      "accept_backwards_strokes": false,
+      "hint_after_misses": 0,
+      "hint_animation_speed": 0.5,
+      "show_outline": false,
+      "mistake_penalty_stroke_ratio": 0.8,
+      "hint_penalty_stroke_ratio": 1.2,
+      "hard_min_score": 60,
+      "good_min_score": 75
     }
   }
 }

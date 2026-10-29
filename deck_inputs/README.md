@@ -128,10 +128,9 @@ Example:
 ### Card Settings
 
 `card_settings` bakes template behavior into the generated cards.
-Display and practice settings are grouped by card type and side.
 Supported card types are `Meaning`, `Pinyin`, and `Write`.
-Supported sides are `front` and `back`.
-Write also has a shared `scoring` section, so a result uses the same score thresholds before and after revealing the answer.
+Meaning and Pinyin group display settings under `front` and `back`.
+All Writer settings live directly under `card_settings.Write`, without side-specific or scoring subsections.
 Only settings listed below are accepted.
 All settings are optional; omitted values keep their defaults. The checked-in Writer settings explicitly show the current defaults for experimentation.
 Settings for card types not included in `card_types` do not generate additional cards.
@@ -142,11 +141,10 @@ Meaning and Pinyin settings:
 - `show_meaning`: boolean, default `true`
 - `show_simplified`: boolean, default `true`
 
-Write `front` and `back` settings:
+Write settings:
 
 - `show_pinyin`: boolean, default `true`
 - `show_meaning`: boolean, default `true`
-- `show_simplified`: boolean, default `false` on the front and `true` on the back
 - `show_grid`: boolean, default `false`
 - `show_outline`: boolean, default `false`
 - `stroke_tone_color`: boolean, default `true`
@@ -156,21 +154,17 @@ Write `front` and `back` settings:
 - `stroke_leniency`: number from `0.1` to `2.0`, default `0.8`. Lower is stricter, higher is more forgiving. This scales Hanzi Writer's stroke-matching tolerances, not the score penalty. Try small changes around `0.8` or `1.0` first.
 - `accept_backwards_strokes`: boolean, default `false`. When `true`, an otherwise matching stroke may be drawn in the reverse direction. Stroke order is still required.
 - `hint_animation_speed`: number from `0.1` to `5.0`, default `0.5`. Smaller values show the hint more slowly. This changes timing only, not the hint penalty.
+- `mistake_penalty_stroke_ratio`: number from `0` to `5`, default `0.8`. Deduction per rejected stroke, as a multiple of one stroke's score value.
+- `hint_penalty_stroke_ratio`: number from `0` to `5`, default `1.2`. Deduction per hinted stroke, as a multiple of one stroke's score value.
+- `hard_min_score`: integer from `0` to `99`, default `60`. Minimum score for the `Hard` suggestion.
+- `good_min_score`: integer from `1` to `100`, default `75`. Minimum score for the `Good` suggestion. Must be greater than `hard_min_score`.
 
-These map to the options in the pinned Hanzi Writer library; see the [Hanzi Writer API](https://hanziwriter.org/docs.html#api).
+Practice options map to the pinned [Hanzi Writer API](https://hanziwriter.org/docs.html#api).
 Automatic acceptance after repeated mistakes remains disabled: a stroke must still match.
 `show_outline` is a continuous visual aid; enabling it does not itself deduct points.
+The written answer stays hidden during practice and appears after completion or on the answer side; this is template behavior, not a separate setting.
 
-#### Writer Scoring
-
-Configure these under `card_settings.Write.scoring`, not under `front` or `back`:
-
-| Setting | Default | Allowed values | Meaning |
-| --- | --- | --- | --- |
-| `mistake_penalty_stroke_ratio` | `0.8` | Number, `0` to `5` | Deduction per rejected stroke, as a multiple of one stroke's score value. |
-| `hint_penalty_stroke_ratio` | `1.2` | Number, `0` to `5` | Deduction per hinted stroke, as a multiple of one stroke's score value. |
-| `hard_min_score` | `60` | Integer, `0` to `99` | Minimum score for the `Hard` suggestion. |
-| `good_min_score` | `75` | Integer, `1` to `100` | Minimum score for the `Good` suggestion. Must be greater than `hard_min_score`. |
+#### Score Calculation
 
 One stroke's value is `100 / N`, where `N` is the total number of strokes across the entire word, not just the current character.
 For `C` correctly completed strokes, `M` mistakes, and `H` hinted strokes:
@@ -202,26 +196,21 @@ Example `card_settings` override:
   },
   "card_settings": {
     "Write": {
-      "front": {
-        "show_pinyin": true,
-        "show_meaning": true,
-        "show_simplified": false,
-        "show_grid": false,
-        "show_outline": false,
-        "stroke_tone_color": true,
-        "grid_size": 400,
-        "stroke_width": 64,
-        "hint_after_misses": 0,
-        "stroke_leniency": 0.8,
-        "accept_backwards_strokes": false,
-        "hint_animation_speed": 0.5
-      },
-      "scoring": {
-        "mistake_penalty_stroke_ratio": 0.8,
-        "hint_penalty_stroke_ratio": 1.2,
-        "hard_min_score": 60,
-        "good_min_score": 75
-      }
+      "show_pinyin": true,
+      "show_meaning": true,
+      "show_grid": false,
+      "show_outline": false,
+      "stroke_tone_color": true,
+      "grid_size": 400,
+      "stroke_width": 64,
+      "hint_after_misses": 0,
+      "stroke_leniency": 0.8,
+      "accept_backwards_strokes": false,
+      "hint_animation_speed": 0.5,
+      "mistake_penalty_stroke_ratio": 0.8,
+      "hint_penalty_stroke_ratio": 1.2,
+      "hard_min_score": 60,
+      "good_min_score": 75
     }
   }
 }

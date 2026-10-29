@@ -40,7 +40,7 @@ class DeckSelection:
         }
 
 
-DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
+DEFAULT_CARD_SETTINGS: dict[str, dict[str, Any]] = {
     "Meaning": {
         "front": {
             "show_pinyin": True,
@@ -66,45 +66,26 @@ DEFAULT_CARD_SETTINGS: dict[str, dict[str, dict[str, Any]]] = {
         },
     },
     "Write": {
-        "front": {
-            "show_pinyin": True,
-            "show_meaning": True,
-            "show_simplified": False,
-            "show_grid": False,
-            "show_outline": False,
-            "stroke_tone_color": True,
-            "grid_size": 400,
-            "stroke_width": 64,
-            "hint_after_misses": 0,
-            "stroke_leniency": 0.8,
-            "accept_backwards_strokes": False,
-            "hint_animation_speed": 0.5,
-        },
-        "back": {
-            "show_pinyin": True,
-            "show_meaning": True,
-            "show_simplified": True,
-            "show_grid": False,
-            "show_outline": False,
-            "stroke_tone_color": True,
-            "grid_size": 400,
-            "stroke_width": 64,
-            "hint_after_misses": 0,
-            "stroke_leniency": 0.8,
-            "accept_backwards_strokes": False,
-            "hint_animation_speed": 0.5,
-        },
-        "scoring": {
-            "mistake_penalty_stroke_ratio": 0.8,
-            "hint_penalty_stroke_ratio": 1.2,
-            "hard_min_score": 60,
-            "good_min_score": 75,
-        },
+        "show_pinyin": True,
+        "show_meaning": True,
+        "show_grid": False,
+        "show_outline": False,
+        "stroke_tone_color": True,
+        "grid_size": 400,
+        "stroke_width": 64,
+        "hint_after_misses": 0,
+        "stroke_leniency": 0.8,
+        "accept_backwards_strokes": False,
+        "hint_animation_speed": 0.5,
+        "mistake_penalty_stroke_ratio": 0.8,
+        "hint_penalty_stroke_ratio": 1.2,
+        "hard_min_score": 60,
+        "good_min_score": 75,
     },
 }
 
 
-def default_card_settings() -> dict[str, dict[str, dict[str, Any]]]:
+def default_card_settings() -> dict[str, dict[str, Any]]:
     return deepcopy(DEFAULT_CARD_SETTINGS)
 
 
@@ -112,7 +93,7 @@ def default_card_settings() -> dict[str, dict[str, dict[str, Any]]]:
 class DeckConfig:
     card_types: tuple[str, ...] = tuple(common.CARD_TYPES)
     audio: AudioConfig = field(default_factory=AudioConfig)
-    card_settings: dict[str, dict[str, dict[str, Any]]] = field(default_factory=default_card_settings)
+    card_settings: dict[str, dict[str, Any]] = field(default_factory=default_card_settings)
     selection: DeckSelection = field(default_factory=DeckSelection)
 
     def card_settings_json(self, card_type: str) -> str:
@@ -292,32 +273,28 @@ def normalize_card_setting(value: Any, field_name: str) -> Any:
 
 def merge_card_settings(
     raw: Any,
-    default: dict[str, dict[str, dict[str, Any]]] | None = None,
-) -> dict[str, dict[str, dict[str, Any]]]:
+    default: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
     settings = deepcopy(default) if default is not None else default_card_settings()
     if raw is None:
         return settings
-    if not isinstance(raw, dict):
-        raise ValueError("deck config card_settings must be an object")
 
-    for card_type, card_settings in raw.items():
-        if card_type not in settings:
-            raise ValueError(f"deck config card_settings has unknown card type: {card_type}")
-        if not isinstance(card_settings, dict):
-            raise ValueError(f"deck config card_settings.{card_type} must be an object")
-        for section, section_settings in card_settings.items():
-            if section not in settings[card_type]:
-                raise ValueError(f"deck config card_settings.{card_type} has unknown section: {section}")
-            if not isinstance(section_settings, dict):
-                raise ValueError(f"deck config card_settings.{card_type}.{section} must be an object")
-            for key, value in section_settings.items():
-                if key not in settings[card_type][section]:
-                    raise ValueError(f"deck config card_settings.{card_type}.{section} has unknown setting: {key}")
-                field_name = f"card_settings.{card_type}.{section}.{key}"
-                settings[card_type][section][key] = normalize_card_setting(value, field_name)
+    def apply_overrides(overrides: Any, target: dict[str, Any], path: str) -> None:
+        if not isinstance(overrides, dict):
+            raise ValueError(f"deck config {path} must be an object")
+        for key, value in overrides.items():
+            if key not in target:
+                raise ValueError(f"deck config {path} has unknown setting: {key}")
+            field_name = f"{path}.{key}"
+            if isinstance(target[key], dict):
+                apply_overrides(value, target[key], field_name)
+            else:
+                target[key] = normalize_card_setting(value, field_name)
 
-    scoring = settings["Write"]["scoring"]
-    if scoring["hard_min_score"] >= scoring["good_min_score"]:
-        raise ValueError("deck config card_settings.Write.scoring requires hard_min_score < good_min_score")
+    apply_overrides(raw, settings, "card_settings")
+
+    writer = settings["Write"]
+    if writer["hard_min_score"] >= writer["good_min_score"]:
+        raise ValueError("deck config card_settings.Write requires hard_min_score < good_min_score")
 
     return settings

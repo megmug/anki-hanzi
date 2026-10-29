@@ -28,7 +28,7 @@ class DeckBuildReportInput:
     source_schema: str
     build_id: str
     card_types: tuple[str, ...]
-    card_settings: dict[str, dict[str, dict[str, Any]]]
+    card_settings: dict[str, dict[str, Any]]
     dedupe_key: str
     entries_by_card_type: Mapping[str, Sequence[EnrichedWordEntry]]
     all_entries: Sequence[EnrichedWordEntry]
