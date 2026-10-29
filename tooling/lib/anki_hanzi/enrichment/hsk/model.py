@@ -134,7 +134,6 @@ BucketItem = HskSourceForm | HskMatchingPair
 class MatchingRuleResult(TypedDict):
     selected_items: list[HskMatchingPair]
     remaining_items: list[HskMatchingPair]
-    selected_source_form_ids: set[int]
 
 
 class SourcePreludeRuleResult(TypedDict):
@@ -170,7 +169,6 @@ class BucketResult(TypedDict):
     removed_from_remaining_matching_pair_count: int
     remaining_source_form_count_after_consumption: int
     remaining_matching_pair_count_after_consumption: int
-    items_after_consumption: list[BucketItem]
 
 
 class SourcePreludePipelineResult(TypedDict):
@@ -248,7 +246,6 @@ def source_prelude_bucket_result(
         "removed_from_remaining_matching_pair_count": 0,
         "remaining_source_form_count_after_consumption": consumption["remaining_source_form_count"],
         "remaining_matching_pair_count_after_consumption": 0,
-        "items_after_consumption": [],
     }
 
 
@@ -259,7 +256,6 @@ def pair_pipeline_bucket_result(
     input_items: list[HskMatchingPair],
     selected_items: list[HskMatchingPair],
     consumption: PairConsumption,
-    items_after_consumption: list[HskMatchingPair] | None = None,
 ) -> BucketResult:
     remaining_items = consumption["remaining_items"]
     return {
@@ -275,5 +271,4 @@ def pair_pipeline_bucket_result(
         "removed_from_remaining_matching_pair_count": consumption["removed_from_remaining_matching_pair_count"],
         "remaining_source_form_count_after_consumption": len(bucket_source_form_ids(remaining_items)),
         "remaining_matching_pair_count_after_consumption": bucket_matching_pair_count(remaining_items),
-        "items_after_consumption": [] if items_after_consumption is None else items_after_consumption,
     }

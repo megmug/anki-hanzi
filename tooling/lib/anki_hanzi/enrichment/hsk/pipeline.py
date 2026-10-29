@@ -110,7 +110,10 @@ def apply_pair_pipeline_rules(working_pairs: list[HskMatchingPair]) -> PairPipel
     bucket_results: dict[str, BucketResult] = {}
     consumed_by_source_form: dict[int, str] = {}
 
-    for definition in bucket_definitions_by_phase("pair_pipeline"):
+    for definition in (
+        *bucket_definitions_by_phase("pair_pipeline"),
+        *bucket_definitions_by_phase("terminal"),
+    ):
         input_items = remaining_items
         selected_items: list[HskMatchingPair] = []
 
@@ -135,32 +138,6 @@ def apply_pair_pipeline_rules(working_pairs: list[HskMatchingPair]) -> PairPipel
             input_items=input_items,
             selected_items=selected_items,
             consumption=consumption,
-        )
-
-    for definition in bucket_definitions_by_phase("terminal"):
-        input_items = remaining_items
-        selected_items: list[HskMatchingPair] = []
-        for rule in definition.matching_rules:
-            result = rule.match_pairs(remaining_items, definition.name)
-            selected_items.extend(result["selected_items"])
-            remaining_items = result["remaining_items"]
-        consumption_rule = definition.consumption_rule
-        consumption: PairConsumption = (
-            consumption_rule.consume_pairs(selected_items, remaining_items)
-            if consumption_rule is not None
-            else empty_pair_consumption(remaining_items)
-        )
-        remaining_items = consumption["remaining_items"]
-        for source_form_id in consumption["consumed_source_form_ids"]:
-            consumed_by_source_form[source_form_id] = definition.name
-
-        bucket_results[definition.name] = pair_pipeline_bucket_result(
-            bucket=definition.name,
-            phase=definition.phase,
-            input_items=input_items,
-            selected_items=selected_items,
-            consumption=consumption,
-            items_after_consumption=selected_items,
         )
 
     return {
@@ -219,14 +196,11 @@ def build_matching_pipeline(
     }
 
     return {
-        "target_form_index": target_form_index,
         "dictionary_word_count": dictionary_word_count,
         "dictionary_form_count": dictionary_form_count,
         "source_forms_by_id": source_forms_by_id,
-        "source_prelude_result": source_prelude_result,
         "materialization_result": materialization_result,
         "working_pairs": working_pairs,
-        "pair_pipeline_result": pair_pipeline_result,
         "bucket_results": bucket_results,
         "consumed_by_source_form": consumed_by_source_form,
     }

@@ -183,7 +183,6 @@ def matching_result(
     return {
         "selected_items": selected_items,
         "remaining_items": remaining_items,
-        "selected_source_form_ids": bucket_source_form_ids(selected_items),
     }
 
 
@@ -822,7 +821,6 @@ def match_default_unresolved_pairs(
     return {
         "selected_items": selected_items,
         "remaining_items": [],
-        "selected_source_form_ids": bucket_source_form_ids(selected_items),
     }
 
 
