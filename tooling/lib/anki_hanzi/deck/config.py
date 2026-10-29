@@ -166,17 +166,11 @@ def parse_simplified_list(value: Any, field_name: str) -> frozenset[str]:
 def parse_bool(value: Any, field_name: str) -> bool:
     if isinstance(value, bool):
         return value
-    if isinstance(value, str):
-        normalized = value.strip().casefold()
-        if normalized in {"true", "1", "yes", "on"}:
-            return True
-        if normalized in {"false", "0", "no", "off"}:
-            return False
     raise ValueError(f"deck config {field_name} must be boolean")
 
 
 def parse_int(value: Any, field_name: str, minimum: int, maximum: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"deck config {field_name} must be an integer")
     if isinstance(value, float) and not value.is_integer():
         raise ValueError(f"deck config {field_name} must be an integer")
@@ -190,7 +184,7 @@ def parse_int(value: Any, field_name: str, minimum: int, maximum: int) -> int:
 
 
 def parse_float(value: Any, field_name: str, minimum: float, maximum: float) -> float:
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"deck config {field_name} must be a number")
     try:
         parsed = float(value)

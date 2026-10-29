@@ -132,6 +132,7 @@ Supported card types are `Meaning`, `Pinyin`, and `Write`.
 Meaning and Pinyin group display settings under `front` and `back`.
 All Writer settings live directly under `card_settings.Write`, without side-specific or scoring subsections.
 Only settings listed below are accepted.
+Use JSON booleans (`true`/`false`) and numbers, not quoted strings such as `"on"` or `"400"`.
 All settings are optional; omitted values keep their defaults. The checked-in Writer settings explicitly show the current defaults for experimentation.
 Settings for card types not included in `card_types` do not generate additional cards.
 
