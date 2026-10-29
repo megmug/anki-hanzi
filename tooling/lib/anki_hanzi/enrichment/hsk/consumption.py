@@ -315,19 +315,14 @@ def deck_entries_for_source_form_ids(
     return [deck_entries[source_form_id] for source_form_id in sorted(source_form_ids)]
 
 
-def deck_entry_for_pair(deck_entries: list[dict[str, Any]], item: HskMatchingPair) -> dict[str, Any]:
-    return deck_entries[item.source_form_id]
-
-
 def deck_entry_with_manual_pinyin_override(
-    deck_entries: list[dict[str, Any]],
     item: HskMatchingPair,
 ) -> dict[str, Any]:
     override = item.context.get("manual_pinyin_override")
     if override is None:
         raise ValueError(f"Manual Pinyin override bucket item lacks override context: {item!r}")
 
-    entry = dict(deck_entry_for_pair(deck_entries, item))
+    entry = dict(item.source_form.entry)
     entry["raw_pinyin"] = override["raw_pinyin"]
     entry["pinyin"] = override["override_pinyin"]
     entry["manual_pinyin_override"] = override
@@ -458,7 +453,7 @@ def consume_metadata_only_bucket(
 
     for item in sorted(selected_items, key=item_source_form_id):
         word, form, _, _ = target_word_and_form_from_pair(state, item)
-        entry = deck_entry_for_pair(deck_entries, item)
+        entry = item.source_form.entry
         validate_item(entry, form, item)
         apply_entry_metadata_to_selected_form(word, form, entry)
         form_stats["matched"] += 1
@@ -505,7 +500,7 @@ def consume_manual_pinyin_override_bucket(
 
     for item in sorted(selected_items, key=item_source_form_id):
         word, form, _, form_key = target_word_and_form_from_pair(state, item)
-        entry = deck_entry_with_manual_pinyin_override(deck_entries, item)
+        entry = deck_entry_with_manual_pinyin_override(item)
         old_pinyin = form.pinyin
         match_type = pinyin_rule_kind(entry["pinyin"], form.pinyin_reading_string)
         if match_type not in {"exact", "format_variant"}:
@@ -605,7 +600,7 @@ def consume_spoken_tone_variant_bucket(
             raise ValueError(f"Spoken-tone-variant bucket lacks recognized variant context: {item!r}")
 
         word, form, _, _ = target_word_and_form_from_pair(state, item)
-        entry = deck_entry_for_pair(deck_entries, item)
+        entry = item.source_form.entry
         dictionary_pinyin = form.pinyin_reading_string
         if pinyin_rule_kind(entry["pinyin"], dictionary_pinyin) != "toneless":
             raise ValueError(f"Spoken-tone-variant bucket selected a non-toneless pair: {item!r}")
@@ -761,7 +756,7 @@ def consume_also_pr_bucket(
 
     for item in sorted(selected_items, key=item_source_form_id):
         word, form, _, _ = target_word_and_form_from_pair(state, item)
-        entry = deck_entry_for_pair(deck_entries, item)
+        entry = item.source_form.entry
         validate_item(entry, form, item)
         apply_entry_metadata_to_selected_form(word, form, entry)
         reading_record = add_also_pr_readings_to_form(item, form, context_key)
@@ -837,7 +832,7 @@ def consume_source_see_colloquial_pr_bucket(
             raise ValueError(f"Source-see colloquial-pr bucket lacks attested reading context: {item!r}")
 
         word, form, _, _ = target_word_and_form_from_pair(state, item)
-        entry = deck_entry_for_pair(deck_entries, item)
+        entry = item.source_form.entry
         reading = context["attested_source_reading"]
         if (
             word.simplified != entry["simplified"]
