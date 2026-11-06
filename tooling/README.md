@@ -87,5 +87,8 @@ practice writers or thumbnails are replaced. It adapts private hooks of the pinn
 Hanzi Writer 3.7.3, which has no public disposal API; recheck these hooks on library upgrades.
 
 Card height follows the visible viewport, including a top offset from the reviewer. Changes
-to the viewport or loaded fonts update this height without waiting for a scroll. Pinch zoom
-does not trigger a layout resize.
+to the viewport or loaded fonts update this height without waiting for a scroll. On card
+display, viewport resize, and return from the background, five extra measurements over two
+seconds catch delayed webview layout changes even without a resize event. Unchanged heights
+do not rewrite the layout, and card disposal cancels pending measurements. There is no
+continuous polling. Pinch zoom does not trigger a layout resize.

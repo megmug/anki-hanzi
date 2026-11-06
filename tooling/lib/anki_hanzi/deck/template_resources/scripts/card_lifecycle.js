@@ -58,14 +58,16 @@
   listen(window, "pagehide", dispose);
 
   function updateViewport() {
-    if (!isActive()) return;
+    if (!isActive() || document.hidden) return;
     var viewport = window.visualViewport;
     // Pinch zoom should magnify the card, not cause it to reflow continuously.
     if (viewport && viewport.scale !== 1) return;
     var height = viewport ? Math.min(window.innerHeight, viewport.height) : window.innerHeight;
     var top = Math.max(0, screen.getBoundingClientRect().top + window.scrollY);
     var available = Math.floor(height - top);
-    if (available > 0) screen.style.setProperty("--hanzi-viewport-height", available + "px");
+    if (available > 0 && screen.style.getPropertyValue("--hanzi-viewport-height") !== available + "px") {
+      screen.style.setProperty("--hanzi-viewport-height", available + "px");
+    }
   }
 
   var viewportFrame = null;
@@ -79,13 +81,38 @@
   onCleanup(function () {
     if (viewportFrame !== null) cancelAnimationFrame(viewportFrame);
   });
-  listen(window, "resize", scheduleViewport);
+
+  var viewportRetry = null;
+  function settleViewport() {
+    if (viewportRetry !== null) {
+      clearTimeout(viewportRetry);
+      timers.delete(viewportRetry);
+      viewportRetry = null;
+    }
+    if (!isActive() || document.hidden) return;
+    scheduleViewport();
+    // Webviews can settle after the first frame without another resize event.
+    // Keep one pending retry; the card lifecycle cancels it on replacement.
+    var delays = [100, 250, 500, 1000, 2000];
+    function retry(index) {
+      var delay = delays[index] - (index === 0 ? 0 : delays[index - 1]);
+      viewportRetry = timeout(function () {
+        viewportRetry = null;
+        scheduleViewport();
+        if (index + 1 < delays.length) retry(index + 1);
+      }, delay);
+    }
+    retry(0);
+  }
+
+  listen(window, "resize", settleViewport);
+  listen(document, "visibilitychange", settleViewport);
   if (window.visualViewport) {
-    listen(window.visualViewport, "resize", scheduleViewport);
+    listen(window.visualViewport, "resize", settleViewport);
     listen(window.visualViewport, "scroll", scheduleViewport);
   }
   updateViewport();
-  scheduleViewport();
+  settleViewport();
   if (document.fonts) document.fonts.ready.then(function () {
     if (isActive()) scheduleViewport();
   });
