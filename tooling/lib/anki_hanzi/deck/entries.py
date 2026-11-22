@@ -156,13 +156,6 @@ def _display_pinyin_readings(forms: list[LexiconForm]) -> str:
     return " / ".join(readings)
 
 
-def flatten_entries_by_card_type(entries_by_card_type: dict[str, list[EnrichedWordEntry]]) -> list[EnrichedWordEntry]:
-    entries: list[EnrichedWordEntry] = []
-    for card_type_entries in entries_by_card_type.values():
-        entries.extend(card_type_entries)
-    return entries
-
-
 def build_entries_from_state(
     state: LexiconState,
     selection: DeckSelection,
@@ -170,7 +163,6 @@ def build_entries_from_state(
     meaning_entries: list[EnrichedWordEntry] = []
     pinyin_entries: list[EnrichedWordEntry] = []
     write_entries: list[EnrichedWordEntry] = []
-    matched_individual_simplified: set[str] = set()
     rendered_meaning_html_used = 0
     seen_meaning_entry_keys: set[tuple[str, str]] = set()
     seen_word_level_words: set[str] = set()
@@ -220,9 +212,6 @@ def build_entries_from_state(
                 continue
             seen_meaning_entry_keys.add(entry_key)
 
-            if is_individual:
-                matched_individual_simplified.add(simplified)
-
             entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_pinyin,
@@ -243,9 +232,6 @@ def build_entries_from_state(
 
     selection_report = {
         **selection.report(),
-        "entries_by_card_type": {card_type: len(entries) for card_type, entries in entries_by_card_type.items()},
-        "matched_individual_simplified": sorted(matched_individual_simplified),
-        "unmatched_individual_simplified": sorted(selection.individual_simplified - matched_individual_simplified),
         "meaning_html": {
             "rendered_from_data": rendered_meaning_html_used,
         },

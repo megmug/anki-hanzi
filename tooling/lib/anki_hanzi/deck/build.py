@@ -13,12 +13,8 @@ from typing import Any
 import genanki
 
 from anki_hanzi.deck import common
-from anki_hanzi.deck.config import DeckConfig, load_deck_config
-from anki_hanzi.deck.entries import (
-    EnrichedWordEntry,
-    build_entries_from_state,
-    flatten_entries_by_card_type,
-)
+from anki_hanzi.deck.config import load_deck_config
+from anki_hanzi.deck.entries import EnrichedWordEntry, build_entries_from_state
 from anki_hanzi.deck.hanzi_writer import build_hanzi_writer_bundle, is_writable_hanzi
 from anki_hanzi.deck.migrator_addon import build_migrator_addon
 from anki_hanzi.deck.models import create_models
@@ -52,28 +48,20 @@ class EnrichedStateBuildResult:
 
 
 def build_decks(
-    config: DeckConfig,
     models: dict[str, genanki.Model],
     entries_by_card_type: dict[str, list[EnrichedWordEntry]],
     build_id: str,
 ) -> list[genanki.Deck]:
-    decks: list[genanki.Deck] = []
-
-    for card_type in config.card_types:
-        card_entries = entries_by_card_type.get(card_type, [])
-        if card_type == "Write":
-            card_entries = [entry for entry in card_entries if is_writable_hanzi(entry.simplified)]
-        decks.append(
-            common.create_deck(
-                deck_name=f"{common.DECK_ROOT}::{card_type}",
-                card_type=card_type,
-                model=models[card_type],
-                entries=card_entries,
-                build_id=build_id,
-            )
+    return [
+        common.create_deck(
+            deck_name=f"{common.DECK_ROOT}::{card_type}",
+            card_type=card_type,
+            model=models[card_type],
+            entries=entries,
+            build_id=build_id,
         )
-
-    return decks
+        for card_type, entries in entries_by_card_type.items()
+    ]
 
 
 def resolve_build_id() -> str:
@@ -263,11 +251,18 @@ def build_package(
             bct_data_dir=bct_data_dir,
         )
         state = enriched_state_result.state
-        entries_by_card_type, selection_report = build_entries_from_state(
+        candidates, selection_report = build_entries_from_state(
             state,
             config.selection,
         )
-        all_deck_entries = flatten_entries_by_card_type(entries_by_card_type)
+        entries_by_card_type = {kind: candidates[kind] for kind in config.card_types}
+        writer_bundle = None
+        if "Write" in entries_by_card_type:
+            entries_by_card_type["Write"] = [
+                entry for entry in candidates["Write"] if is_writable_hanzi(entry.simplified)
+            ]
+            writer_bundle = workspace.hanzi_writer_bundle
+            build_hanzi_writer_bundle(entries_by_card_type["Write"], writer_bundle)
         build_id = resolve_build_id()
         known_build_ids = resolve_known_build_ids(build_id)
         build_migrator_addon(
@@ -278,13 +273,8 @@ def build_package(
             zip_datetime=zip_generated_datetime or DEFAULT_ZIP_DATETIME,
         )
 
-        write_entries = [
-            entry for entry in entries_by_card_type.get("Write", []) if is_writable_hanzi(entry.simplified)
-        ]
-        build_hanzi_writer_bundle(write_entries, workspace.hanzi_writer_bundle)
-
-        models = create_models(config, workspace.hanzi_writer_bundle)
-        decks = build_decks(config, models, entries_by_card_type, build_id)
+        models = create_models(config, writer_bundle)
+        decks = build_decks(models, entries_by_card_type, build_id)
 
         package = genanki.Package(decks, media_files=HanziTemplateGenerator().static_media())
         write_package(
@@ -312,7 +302,6 @@ def build_package(
                 card_settings=config.card_settings,
                 dedupe_key=HANZI_DEDUPE_KEY,
                 entries_by_card_type=entries_by_card_type,
-                all_entries=all_deck_entries,
                 total_cards=sum(len(deck.notes) for deck in decks),
                 decks_count=len(decks),
                 timestamp=timestamp,

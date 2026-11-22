@@ -29,7 +29,6 @@ class DeckBuildReportInput:
     card_settings: dict[str, dict[str, Any]]
     dedupe_key: str
     entries_by_card_type: Mapping[str, Sequence[EnrichedWordEntry]]
-    all_entries: Sequence[EnrichedWordEntry]
     total_cards: int
     decks_count: int
     timestamp: float | None
@@ -37,10 +36,6 @@ class DeckBuildReportInput:
     default_zip_datetime: tuple[int, int, int, int, int, int]
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None
     dropped_duplicates: Sequence[dict[str, Any]]
-
-
-def _unique_word_count(entries: Sequence[EnrichedWordEntry]) -> int:
-    return len({entry.simplified.strip() for entry in entries if entry.simplified.strip()})
 
 
 def selected_enrichment_samples(samples: Mapping[str, Any]) -> dict[str, Any]:
@@ -65,7 +60,8 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
     enrichment_summary = data.enrichment_report["summary"]
     hsk_report = data.enrichment_report["hsk_enrichment"]
     entries_by_card_type = {card_type: len(entries) for card_type, entries in data.entries_by_card_type.items()}
-    total_words = _unique_word_count(data.all_entries)
+    emitted_words = {entry.simplified for entries in data.entries_by_card_type.values() for entry in entries}
+    individual_words = set(data.selection_report["individual_simplified"])
     diagnostic_databases = {}
     if data.master_db_output is not None:
         diagnostic_databases["master"] = str(data.master_db_output)
@@ -84,7 +80,7 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
         "summary": {
             "build_id": data.build_id,
             "deck_root": common.DECK_ROOT,
-            "total_words": total_words,
+            "total_words": len(emitted_words),
             "total_cards": data.total_cards,
             "entries_by_card_type": entries_by_card_type,
             "decks": data.decks_count,
@@ -124,12 +120,14 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
             },
             "deck_selection": {
                 **data.selection_report,
+                "matched_individual_simplified": sorted(individual_words & emitted_words),
+                "unmatched_individual_simplified": sorted(individual_words - emitted_words),
                 "source_schema": data.source_schema,
                 "dedupe_key": data.dedupe_key,
                 "card_types": list(data.card_types),
                 "card_settings": data.card_settings,
                 "entries_by_card_type": entries_by_card_type,
-                "total_words": total_words,
+                "total_words": len(emitted_words),
                 "total_cards": data.total_cards,
             },
             "hanzi_writer": {
