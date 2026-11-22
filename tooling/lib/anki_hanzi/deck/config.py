@@ -18,11 +18,6 @@ SUPPORTED_SELECTION_FIELDS = {"individual_simplified", "mode", "tags"}
 
 
 @dataclass(frozen=True)
-class AudioConfig:
-    engine: str = "off"  # "kokoro", "edge_tts", or "off"
-
-
-@dataclass(frozen=True)
 class DeckSelection:
     mode: str = ""
     tags: tuple[str, ...] = ()
@@ -87,7 +82,6 @@ def default_card_settings() -> dict[str, dict[str, Any]]:
 @dataclass(frozen=True)
 class DeckConfig:
     card_types: tuple[str, ...] = tuple(common.CARD_TYPES)
-    audio: AudioConfig = field(default_factory=AudioConfig)
     card_settings: dict[str, dict[str, Any]] = field(default_factory=default_card_settings)
     selection: DeckSelection = field(default_factory=DeckSelection)
 
@@ -106,6 +100,9 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("deck config must be an object")
+    unknown_keys = sorted(set(raw) - {"selection", "card_types", "card_settings"})
+    if unknown_keys:
+        raise ValueError(f"deck config has unknown setting: {', '.join(unknown_keys)}")
     defaults = DeckConfig()
     selection = raw.get("selection")
     if selection is None:
@@ -115,7 +112,6 @@ def load_deck_config(path: Path | None = None) -> DeckConfig:
 
     return DeckConfig(
         card_types=merge_card_types(raw.get("card_types"), defaults.card_types),
-        audio=merge_audio_config(raw.get("audio"), defaults.audio),
         card_settings=merge_card_settings(raw.get("card_settings"), defaults.card_settings),
         selection=parse_deck_selection(selection, path),
     )
@@ -128,9 +124,7 @@ def parse_deck_selection(raw: dict[str, Any], config_path: Path) -> DeckSelectio
 
     mode = raw.get("mode")
     if not isinstance(mode, str) or mode not in SUPPORTED_SELECTION_MODES:
-        raise ValueError(
-            f"deck config selection.mode must be one of: {', '.join(sorted(SUPPORTED_SELECTION_MODES))}"
-        )
+        raise ValueError(f"deck config selection.mode must be one of: {', '.join(sorted(SUPPORTED_SELECTION_MODES))}")
 
     tags_raw = raw.get("tags", [])
     if isinstance(tags_raw, str):
@@ -193,31 +187,6 @@ def parse_float(value: Any, field_name: str, minimum: float, maximum: float) -> 
     if not math.isfinite(parsed) or parsed < minimum or parsed > maximum:
         raise ValueError(f"deck config {field_name} must be between {minimum} and {maximum}")
     return parsed
-
-
-SUPPORTED_AUDIO_ENGINES = {"off", "kokoro", "edge_tts"}
-
-
-def normalize_audio_engine(value: Any, field_name: str) -> str:
-    engine = str(value or "").strip().casefold().replace("-", "_")
-    if engine not in SUPPORTED_AUDIO_ENGINES:
-        raise ValueError(f"deck config {field_name} must be one of: {', '.join(sorted(SUPPORTED_AUDIO_ENGINES))}")
-    return engine
-
-
-def merge_audio_config(raw: Any, default: AudioConfig) -> AudioConfig:
-    if raw is None:
-        return default
-    if not isinstance(raw, dict):
-        raise ValueError("deck config audio must be an object")
-
-    unknown_keys = sorted(set(raw) - {"engine"})
-    if unknown_keys:
-        raise ValueError(f"deck config audio has unknown setting: {', '.join(unknown_keys)}")
-
-    return AudioConfig(
-        engine=normalize_audio_engine(raw.get("engine", default.engine), "audio.engine"),
-    )
 
 
 def merge_card_types(raw: Any, default: tuple[str, ...]) -> tuple[str, ...]:

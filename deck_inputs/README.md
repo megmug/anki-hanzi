@@ -17,8 +17,8 @@ Card-template code and resources live under `tooling/lib/anki_hanzi/deck/` becau
 
 The deck config is a JSON object.
 The generator requires a `selection` object.
-Every other top-level key is optional and overrides built-in defaults.
-Unknown card types, card-setting sections, audio settings, or card settings fail the build instead of being ignored.
+The other supported top-level keys, `card_types` and `card_settings`, are optional and override built-in defaults.
+Unknown top-level keys, card types, card-setting sections, or card settings fail the build instead of being ignored.
 
 Minimal HSK 1 config:
 
@@ -31,17 +31,14 @@ Minimal HSK 1 config:
 }
 ```
 
-Full no-audio config:
+Full-dictionary config:
 
 ```json
 {
   "selection": {
     "mode": "all"
   },
-  "card_types": ["Meaning", "Pinyin", "Write"],
-  "audio": {
-    "engine": "off"
-  }
+  "card_types": ["Meaning", "Pinyin", "Write"]
 }
 ```
 
@@ -101,27 +98,6 @@ Example:
     "tags": ["hsk:1"]
   },
   "card_types": ["Meaning", "Pinyin"]
-}
-```
-
-### Audio
-
-`audio.engine` controls generated audio.
-The default is `off`.
-Supported values are `off`, `kokoro`, and `edge_tts`.
-`edge-tts` is also accepted and normalized to `edge_tts`.
-
-Example:
-
-```json
-{
-  "selection": {
-    "mode": "tagged",
-    "tags": ["hsk:1"]
-  },
-  "audio": {
-    "engine": "kokoro"
-  }
 }
 ```
 

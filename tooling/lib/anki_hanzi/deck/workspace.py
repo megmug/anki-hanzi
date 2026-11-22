@@ -14,10 +14,6 @@ class BuildWorkspace:
     root: Path
 
     @property
-    def audio_dir(self) -> Path:
-        return self.root / "audio"
-
-    @property
     def hanzi_writer_bundle(self) -> Path:
         return self.root / "hanzi-writer-data.js"
 

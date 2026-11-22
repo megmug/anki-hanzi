@@ -185,7 +185,6 @@
     document.querySelector(".hanzi-card").classList.add("writer-complete");
 
     showHide("#btnHintStroke", false);
-    playAudio();
     showHide("#char_sim", true, "block");
     showHide("#char_meaning", true, "block");
     if (WRITE_SETTINGS.show_pinyin) {

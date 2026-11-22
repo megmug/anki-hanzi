@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from anki_hanzi.audio.generation import AudioGenerator
 from anki_hanzi.deck.config import DeckSelection
 from anki_hanzi.deck.identity import stable_note_id
 from anki_hanzi.lexicon import LexiconForm, LexiconState, LexiconWord
@@ -18,19 +17,7 @@ class EnrichedWordEntry:
     simplified: str
     pinyin: str
     meaning_html: str
-    audio_filename_primary: str
-    audio_filename_secondary: str
     tags: tuple[str, ...] = ()
-
-    @property
-    def audio_ref(self) -> str:
-        if not self.audio_filename_primary and not self.audio_filename_secondary:
-            return ""
-        return f"[sound:{self.audio_filename_primary}][sound:{self.audio_filename_secondary}]"
-
-    @property
-    def audio_filenames(self) -> tuple[str, str]:
-        return (self.audio_filename_primary, self.audio_filename_secondary)
 
     def fields(self, card_type: str, build_id: str) -> list[str]:
         note_id = stable_note_id(card_type, self.simplified, self.pinyin)
@@ -38,7 +25,7 @@ class EnrichedWordEntry:
             self.simplified,
             self.pinyin,
             self.meaning_html,
-            self.audio_ref,
+            "",  # Audio remains part of the note schema; generation is not implemented.
             note_id,
             build_id,
         ]
@@ -176,22 +163,9 @@ def flatten_entries_by_card_type(entries_by_card_type: dict[str, list[EnrichedWo
     return entries
 
 
-def unique_audio_entries(entries: list[EnrichedWordEntry]) -> list[EnrichedWordEntry]:
-    deduped: list[EnrichedWordEntry] = []
-    seen: set[str] = set()
-    for entry in entries:
-        word = entry.simplified.strip()
-        if not word or word in seen:
-            continue
-        seen.add(word)
-        deduped.append(entry)
-    return deduped
-
-
 def build_entries_from_state(
     state: LexiconState,
     selection: DeckSelection,
-    audio_generator: AudioGenerator,
 ) -> tuple[dict[str, list[EnrichedWordEntry]], dict[str, Any]]:
     meaning_entries: list[EnrichedWordEntry] = []
     pinyin_entries: list[EnrichedWordEntry] = []
@@ -223,13 +197,10 @@ def build_entries_from_state(
         display_readings = _display_pinyin_readings(selected_word_forms)
         if display_readings and simplified not in seen_word_level_words:
             seen_word_level_words.add(simplified)
-            audio_filename_primary, audio_filename_secondary = audio_generator.filenames_for_text(simplified)
             word_level_entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_readings,
                 meaning_html=rendered_definition_html,
-                audio_filename_primary=audio_filename_primary,
-                audio_filename_secondary=audio_filename_secondary,
                 tags=_note_tags(_word_tags(word, forms)),
             )
             pinyin_entries.append(word_level_entry)
@@ -252,13 +223,10 @@ def build_entries_from_state(
             if is_individual:
                 matched_individual_simplified.add(simplified)
 
-            audio_filename_primary, audio_filename_secondary = audio_generator.filenames_for_text(simplified)
             entry = EnrichedWordEntry(
                 simplified=simplified,
                 pinyin=display_pinyin,
                 meaning_html=render_meaning_form(word, meaning_form.form),
-                audio_filename_primary=audio_filename_primary,
-                audio_filename_secondary=audio_filename_secondary,
                 tags=_note_tags(set(meaning_form.tags)),
             )
             meaning_entries.append(entry)

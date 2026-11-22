@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from anki_hanzi.audio.api import AudioGenerationResult
 from anki_hanzi.deck import common
 from anki_hanzi.deck.entries import EnrichedWordEntry
 from anki_hanzi.deck.templates import read_hanzi_writer_package_version
@@ -33,17 +32,11 @@ class DeckBuildReportInput:
     all_entries: Sequence[EnrichedWordEntry]
     total_cards: int
     decks_count: int
-    media_files: Sequence[str]
-    static_media: Sequence[str]
-    audio_engine: str
-    audio_voices: dict[str, dict[str, str]]
-    audio_result: AudioGenerationResult
     timestamp: float | None
     deterministic_zip: bool
     default_zip_datetime: tuple[int, int, int, int, int, int]
     zip_generated_datetime: tuple[int, int, int, int, int, int] | None
     dropped_duplicates: Sequence[dict[str, Any]]
-    missing_audio_files: Sequence[str]
 
 
 def _unique_word_count(entries: Sequence[EnrichedWordEntry]) -> int:
@@ -73,7 +66,6 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
     hsk_report = data.enrichment_report["hsk_enrichment"]
     entries_by_card_type = {card_type: len(entries) for card_type, entries in data.entries_by_card_type.items()}
     total_words = _unique_word_count(data.all_entries)
-    audio_files_packaged = len(data.media_files) - len(data.static_media)
     diagnostic_databases = {}
     if data.master_db_output is not None:
         diagnostic_databases["master"] = str(data.master_db_output)
@@ -99,11 +91,6 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
             "dropped_duplicate_occurrences": len(data.dropped_duplicates),
             "unresolved_source_forms": matching_summary["unresolved_source_forms"],
             "default_unresolved_matching_pair_count": matching_summary["default_unresolved_matching_pair_count"],
-            "audio_engine": data.audio_engine,
-            "audio_files_packaged": audio_files_packaged,
-            "generated_audio_files_count": len(data.audio_result.generated),
-            "failed_audio_generation_count": len(data.audio_result.failed),
-            "missing_audio_files_count": len(data.missing_audio_files),
         },
         "artifacts": artifacts,
         "stages": {
@@ -144,16 +131,6 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
                 "entries_by_card_type": entries_by_card_type,
                 "total_words": total_words,
                 "total_cards": data.total_cards,
-            },
-            "audio": {
-                "engine": data.audio_engine,
-                "voices": data.audio_voices,
-                "audio_files_packaged": audio_files_packaged,
-                "generated_audio_files_count": len(data.audio_result.generated),
-                "failed_audio_generation": data.audio_result.report_failed(),
-                "skipped_audio_generation": data.audio_result.report_skipped(),
-                "removed_zero_length_audio_files": data.audio_result.removed_zero_length,
-                "missing_audio_files": list(data.missing_audio_files),
             },
             "hanzi_writer": {
                 "version": read_hanzi_writer_package_version(),

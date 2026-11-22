@@ -19,14 +19,14 @@ Compared with upstream, this fork currently:
 - bakes deck display settings into the generated templates instead of exposing the old xiehanzi sidebar toggles inside Anki;
 - keeps customization possible by rebuilding the deck with custom options and then using the migrator add-on to import it into Anki, which is more robust than the original xiehanzi approach;
 - allows upgrading the deck to newer versions or other configurations through a bundled migrator add-on with preflight checks and a final verification report, covering a workflow Anki does not handle well by default;
-- can optionally generate audio with Kokoro or edge-tts, but defaults to an audio-free build;
+- keeps the Audio note fields for a future audio implementation, but does not generate or play audio;
 - builds from a much more reproducible Python/Nix pipeline and CI release workflow.
 
 ## How To Use
 
 This deck is not intended to replace immersion or other established methods of acquiring Chinese, and it cannot provide meaningful reading comprehension, listening comprehension, or production ability by itself.
 It is intended to be a low-maintenance, comprehensive, up-to-date, and free companion to your Chinese learning journey.
-Its main purpose is to help you learn 汉字, the Chinese characters, as well as words built from them, by writing them yourself and associating them with pinyin, optionally audio, and meaning.
+Its main purpose is to help you learn 汉字, the Chinese characters, as well as words built from them, by writing them yourself and associating them with pinyin and meaning.
 
 In its default configuration, the deck is huge, and with custom configuration it can cover the entire dictionary.
 After a fresh import, you should therefore suspend all cards and only activate those that you are actively trying to memorize.
@@ -57,10 +57,6 @@ The Nixpkgs revision is pinned in `flake.lock`. The HSK submodule is included au
 `--impure` lets the build read the checkout's local Git metadata so the migrator retains its complete
 first-parent BuildID history. It does not update dependencies or contact Git remotes.
 Use a full Git checkout, not a shallow clone or source archive, and add new source files to Git before building.
-
-On a Linux machine with an NVIDIA GPU and `audio.engine` set to `kokoro`, Nix probes for a usable CUDA driver and can install CUDA-capable PyTorch into the build's isolated temporary `pip` prefix.
-If no NVIDIA driver is available, the build uses CPU PyTorch. On macOS, use `audio.engine=off` or `edge_tts`; the pinned Kokoro dependencies do not support Darwin.
-Audio builds that need network access for model downloads may require a relaxed Nix sandbox configuration.
 
 `nix build` creates the default `result` symlink.
 The build result contains the hash-named APKG, a matching hash-named migrator add-on, and one stage-oriented `build_report.json`.

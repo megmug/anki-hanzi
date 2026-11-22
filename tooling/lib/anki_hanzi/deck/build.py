@@ -12,14 +12,12 @@ from typing import Any
 
 import genanki
 
-from anki_hanzi.audio.generation import AudioGenerator
 from anki_hanzi.deck import common
 from anki_hanzi.deck.config import DeckConfig, load_deck_config
 from anki_hanzi.deck.entries import (
     EnrichedWordEntry,
     build_entries_from_state,
     flatten_entries_by_card_type,
-    unique_audio_entries,
 )
 from anki_hanzi.deck.hanzi_writer import build_hanzi_writer_bundle, is_writable_hanzi
 from anki_hanzi.deck.migrator_addon import build_migrator_addon
@@ -34,7 +32,6 @@ from anki_hanzi.enrichment import (
 from anki_hanzi.json_io import write_json
 from anki_hanzi.lexicon import ENRICHED_LEXICON_SCHEMA, LexiconState
 from anki_hanzi.lexicon.cc_cedict import load_cedict_state, load_snapshot_manifest, resolve_source_file
-from anki_hanzi.paths import DEFAULT_AUDIO_EXCEPTIONS
 
 
 DEFAULT_REPORT_PATH = Path("build_reports/build_report.json")
@@ -111,30 +108,6 @@ def resolve_known_build_ids(current_build_id: str) -> list[str]:
     if current_build_id and current_build_id not in build_ids:
         build_ids.append(current_build_id)
     return list(dict.fromkeys(build_ids))
-
-
-def collect_media(
-    entries: list[EnrichedWordEntry],
-    static_media: list[str],
-    audio_dir: Path,
-) -> tuple[list[str], list[str]]:
-    media = list(static_media)
-    missing_audio: list[str] = []
-    seen_media_names = {Path(path).name for path in media}
-
-    for entry in entries:
-        for filename in entry.audio_filenames:
-            if not filename:
-                continue
-            path = audio_dir / filename
-            if path.exists():
-                if filename not in seen_media_names:
-                    seen_media_names.add(filename)
-                    media.append(str(path))
-            else:
-                missing_audio.append(filename)
-
-    return media, sorted(set(missing_audio))
 
 
 def copy_zip_info(reference_info: zipfile.ZipInfo, filename: str | None = None) -> zipfile.ZipInfo:
@@ -279,11 +252,6 @@ def build_package(
 ) -> dict[str, Any]:
     config = load_deck_config(deck_config_path)
     with temporary_build_workspace() as workspace:
-        audio_generator = AudioGenerator(
-            config.audio.engine,
-            audio_dir=workspace.audio_dir,
-            exceptions_path=DEFAULT_AUDIO_EXCEPTIONS,
-        )
         enriched_state_result = build_enriched_state(
             snapshot_manifest=snapshot_manifest,
             source_file=source_file,
@@ -298,11 +266,8 @@ def build_package(
         entries_by_card_type, selection_report = build_entries_from_state(
             state,
             config.selection,
-            audio_generator,
         )
         all_deck_entries = flatten_entries_by_card_type(entries_by_card_type)
-        audio_deck_entries = unique_audio_entries(all_deck_entries)
-        audio_jobs = audio_generator.jobs_for_texts(entry.simplified for entry in audio_deck_entries)
         build_id = resolve_build_id()
         known_build_ids = resolve_known_build_ids(build_id)
         build_migrator_addon(
@@ -313,9 +278,6 @@ def build_package(
             zip_datetime=zip_generated_datetime or DEFAULT_ZIP_DATETIME,
         )
 
-        static_media = HanziTemplateGenerator().static_media()
-        audio_result = audio_generator.generate(audio_jobs)
-
         write_entries = [
             entry for entry in entries_by_card_type.get("Write", []) if is_writable_hanzi(entry.simplified)
         ]
@@ -324,13 +286,7 @@ def build_package(
         models = create_models(config, workspace.hanzi_writer_bundle)
         decks = build_decks(config, models, entries_by_card_type, build_id)
 
-        media_files, missing_audio = collect_media(
-            audio_deck_entries,
-            static_media,
-            workspace.audio_dir,
-        )
-
-        package = genanki.Package(decks, media_files=media_files)
+        package = genanki.Package(decks, media_files=HanziTemplateGenerator().static_media())
         write_package(
             package=package,
             output_apkg=output_apkg,
@@ -359,17 +315,11 @@ def build_package(
                 all_entries=all_deck_entries,
                 total_cards=sum(len(deck.notes) for deck in decks),
                 decks_count=len(decks),
-                media_files=media_files,
-                static_media=static_media,
-                audio_engine=config.audio.engine,
-                audio_voices=audio_generator.voice_report(),
-                audio_result=audio_result,
                 timestamp=timestamp,
                 deterministic_zip=deterministic_zip,
                 default_zip_datetime=DEFAULT_ZIP_DATETIME,
                 zip_generated_datetime=zip_generated_datetime,
                 dropped_duplicates=state.hanzi_dropped_duplicates,
-                missing_audio_files=missing_audio,
             )
         )
         write_json(report_path, report)

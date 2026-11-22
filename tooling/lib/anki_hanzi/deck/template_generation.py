@@ -117,11 +117,6 @@ WRITE_RUNTIME_FRAGMENT_SPECS = (
         "write runtime tone colors",
     ),
     (
-        "  /* __WRITE_RUNTIME_AUDIO_BUTTON__ */",
-        "write/fragments/runtime/audio_button.js",
-        "write runtime audio button",
-    ),
-    (
         "  /* __WRITE_RUNTIME_GRID_RENDERING__ */",
         "write/fragments/runtime/grid_rendering.js",
         "write runtime grid rendering",
@@ -138,16 +133,6 @@ WRITE_RUNTIME_FRAGMENT_SPECS = (
     ),
 )
 SHARED_JS_FRAGMENT_SPECS = (
-    (
-        "  /* __SHARED_AUDIO__ */",
-        "scripts/audio.js",
-        "shared audio helpers",
-    ),
-    (
-        "  /* __SHARED_AUDIO_BUTTON__ */",
-        "scripts/audio_button.js",
-        "shared audio button helper",
-    ),
     (
         "  /* __SHARED_VISIBILITY__ */",
         "scripts/visibility.js",
@@ -176,8 +161,6 @@ INTERNAL_TEMPLATE_MARKER_PATTERN = re.compile(
 WRITE_REQUIRED_QFMT_SNIPPETS = (
     ("embedded Hanzi Writer library", "/*! Hanzi Writer v"),
     ("Hanzi Writer data loader", "function bundleCharDataLoader(char)"),
-    ("shared audio collector", "function collectAudioElements()"),
-    ("shared audio button setup", "function setupAudioButton()"),
     ("shared visibility helper", "function showHide(selector, isShow, style)"),
     ("shared sidebar helper", "function openSidebar(id)"),
     ("Hanzi Writer instance creation", "new CardHanziWriter("),
@@ -401,7 +384,6 @@ def render_write_front_template(resource_dir: Path) -> str:
     tools = "\n".join(
         (
             render_tool_button("btnHintStroke", "lightbulb", "Hint: next stroke"),
-            render_tool_button("btnPlayAudio", "volume_up", "Play audio"),
             render_tool_button("btnMoreOptions", "more_horiz", "Dictionary links"),
         )
     )
@@ -418,25 +400,19 @@ def render_write_front_template(resource_dir: Path) -> str:
 
 
 def render_basic_back_template(card_type: str, config: DeckConfig) -> str:
-    tools = render_tool_button("btnPlayAudio", "volume_up", "Play audio")
-    tools += render_tool_button("btnMoreOptions", "more_horiz", "Dictionary links")
+    tools = render_tool_button("btnMoreOptions", "more_horiz", "Dictionary links")
     content = f"""<div class="study-layout">
   <div class="study-workspace">
     {render_card_prompt()}
     <div class="card-tools tappable">{tools}</div>
   </div>
   {render_meaning_panel()}
-</div>
-<div id="audio" style="display: none">{{{{Audio}}}}</div>"""
+</div>"""
     template = (
         render_card_shell(card_type, content)
         + """
 <script>
   window.HANZI_CARD_SETTINGS = __HANZI_CARD_SETTINGS__;
-
-  /* __SHARED_AUDIO__ */
-
-  /* __SHARED_AUDIO_BUTTON__ */
 
   /* __SHARED_VISIBILITY__ */
 
@@ -452,7 +428,6 @@ def render_basic_back_template(card_type: str, config: DeckConfig) -> str:
 
   /* __SHARED_SIDEBAR__ */
 
-  setupAudioButton();
   applyCardSettings();
 </script>
 """

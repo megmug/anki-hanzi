@@ -16,7 +16,7 @@ The devShell (`nix develop`, or direnv's `use flake`) uses the same dependencies
 
 - `build/generate_hanzi_deck.py`: build the typed lexicon state, generate the APKG, and package the migrator add-on.
   The build writes one stage-oriented `build_reports/build_report.json` with source, enrichment, matching, selection,
-  audio, HanziWriter, and package summaries.
+  HanziWriter, and package summaries.
   Full diagnostic lexicon JSON dumps are off by default; pass `--master-db-output` and/or `--enriched-db-output`
   when running the CLI directly, or build with `nix build --impure .#with-diagnostics` to include them under
   `result/diagnostics/`.
@@ -59,7 +59,9 @@ These modules are imported by build programs and are not direct entry points.
 - `lib/anki_hanzi/lexicon/`: internal lexicon state and CC-CEDICT source parser.
 - `lib/anki_hanzi/paths.py`: shared paths to committed project inputs.
 - `lib/anki_hanzi/rendering/meaning_html.py`: render hanzi-style Meaning HTML from structured word and form data.
-- `lib/anki_hanzi/audio/`: provider-neutral audio generation plus Kokoro and edge-tts backends.
+
+All note types retain their `Audio` field, which the generator leaves empty. There is no audio-generation stage,
+provider configuration, or audio-specific build dependency. Card templates do not render or play the field.
 
 ## Card Layout
 
