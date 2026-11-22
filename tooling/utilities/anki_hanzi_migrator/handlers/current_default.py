@@ -148,7 +148,9 @@ def deck_ids_under(root):
 def cards_in_decks(dids):
     if not dids:
         return []
-    return mw.col.db.list(f"select id from cards where did in {ids2str_local(dids)} order by id")
+    scope = ids2str_local(dids)
+    # A filtered card keeps its home deck in odid until it is returned.
+    return mw.col.db.list(f"select id from cards where did in {scope} or odid in {scope} order by id")
 
 
 def table_columns(table_name):
