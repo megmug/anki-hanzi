@@ -186,7 +186,6 @@
 
     showHide("#btnHintStroke", false);
     showHide("#char_sim", true, "block");
-    showHide("#char_meaning", true, "block");
     if (WRITE_SETTINGS.show_pinyin) {
       showHide(".pinYinWrapper", true);
     }
