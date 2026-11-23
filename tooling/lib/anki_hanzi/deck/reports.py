@@ -138,9 +138,7 @@ def build_deck_report(data: DeckBuildReportInput) -> dict[str, Any]:
                 "output": str(data.output_apkg),
                 "timestamp": data.timestamp,
                 "deterministic_zip": data.deterministic_zip,
-                "zip_datetime": data.default_zip_datetime
-                if data.deterministic_zip and data.zip_generated_datetime is None
-                else None,
+                "zip_datetime": data.default_zip_datetime if data.deterministic_zip else None,
                 "zip_generated_datetime": data.zip_generated_datetime,
             },
         },

@@ -90,7 +90,8 @@ def parse_args() -> argparse.Namespace:
         "--zip-generated-datetime",
         type=parse_zip_datetime,
         default=DEFAULT_GENERATED_ZIP_DATETIME,
-        help="Set ZIP timestamps for generated members collection.anki2 and media. Format: YYYY-MM-DDTHH:MM:SS.",
+        help="Set the ZIP timestamp for collection.anki2 and the media manifest, including in deterministic mode. "
+        "Format: YYYY-MM-DDTHH:MM:SS.",
     )
     return parser.parse_args()
 

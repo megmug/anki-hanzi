@@ -109,26 +109,21 @@ def copy_zip_info(reference_info: zipfile.ZipInfo, filename: str | None = None) 
     return output_info
 
 
-def normalize_zip_file(source: Path, output: Path, zip_datetime: tuple[int, int, int, int, int, int]) -> None:
-    with zipfile.ZipFile(source) as source_zip, zipfile.ZipFile(output, "w") as output_zip:
-        for info in source_zip.infolist():
-            data = source_zip.read(info.filename)
-            output_info = copy_zip_info(info)
-            output_info.date_time = zip_datetime
-            output_info.extra = b""
-            output_zip.writestr(output_info, data)
-
-
-def rewrite_generated_zip_datetimes(
+def rewrite_zip_datetimes(
     source: Path,
     output: Path,
-    generated_datetime: tuple[int, int, int, int, int, int],
+    *,
+    deterministic: bool,
+    generated_datetime: tuple[int, int, int, int, int, int] | None,
 ) -> None:
     with zipfile.ZipFile(source) as source_zip, zipfile.ZipFile(output, "w") as output_zip:
         for info in source_zip.infolist():
             data = source_zip.read(info.filename)
             output_info = copy_zip_info(info)
-            if info.filename in GENERATED_ZIP_MEMBERS:
+            if deterministic:
+                output_info.date_time = DEFAULT_ZIP_DATETIME
+                output_info.extra = b""
+            if generated_datetime is not None and info.filename in GENERATED_ZIP_MEMBERS:
                 output_info.date_time = generated_datetime
             output_zip.writestr(output_info, data)
 
@@ -156,14 +151,12 @@ def write_package(
         else:
             package.write_to_file(str(temporary_path), timestamp=timestamp)
 
-        if zip_generated_datetime is not None:
-            rewrite_generated_zip_datetimes(
-                source=temporary_path,
-                output=output_apkg,
-                generated_datetime=zip_generated_datetime,
-            )
-        else:
-            normalize_zip_file(temporary_path, output_apkg, DEFAULT_ZIP_DATETIME)
+        rewrite_zip_datetimes(
+            source=temporary_path,
+            output=output_apkg,
+            deterministic=deterministic_zip,
+            generated_datetime=zip_generated_datetime,
+        )
     finally:
         temporary_path.unlink(missing_ok=True)
 
