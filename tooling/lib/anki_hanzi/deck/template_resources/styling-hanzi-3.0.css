@@ -52,13 +52,19 @@
 }
 
 #qa { margin: 0; padding: 0; }
-.hanzi-screen { min-height: 100vh; min-height: var(--hanzi-viewport-height, 100dvh); }
+.hanzi-screen {
+  --hanzi-card-height: var(--hanzi-mobile-height, var(--hanzi-viewport-height, 100vh));
+  min-height: var(--hanzi-card-height);
+}
+/* AnkiMobile's webview extends behind its toolbars. Use its insets, not the scrolling viewport. */
+.ios .hanzi-screen {
+  --hanzi-mobile-height: calc(100vh - var(--top-inset) - var(--bottom-inset));
+}
 .hanzi-screen *, .more-info-sidebar * { box-sizing: border-box; }
 .hanzi-card {
   --card-accent: var(--meaning-accent);
   max-width: 1200px;
-  height: 100vh;
-  height: var(--hanzi-viewport-height, 100dvh);
+  height: var(--hanzi-card-height);
   min-height: 420px;
   margin: 0 auto;
   padding: 16px 24px;
@@ -67,7 +73,7 @@
   gap: 18px;
 }
 .hanzi-pinyin { --card-accent: var(--pinyin-accent); }
-.hanzi-write { --card-accent: var(--write-accent); }
+.hanzi-write { --card-accent: var(--write-accent); min-height: 0; }
 .card-heading {
   display: flex;
   flex: 0 0 auto;
@@ -112,14 +118,20 @@
 .has-meaning .study-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .hanzi-write .writer-layout {
   grid-template-areas: "practice" "score" "tools";
-  grid-template-rows: minmax(120px, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   row-gap: 12px;
 }
 .has-meaning.hanzi-write .writer-layout {
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   grid-template-areas: "practice definitions" "score definitions" "tools definitions";
 }
-.hanzi-write .study-workspace { grid-area: practice; }
+.hanzi-write .study-workspace {
+  grid-area: practice;
+  justify-content: flex-start;
+  justify-content: safe center;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
 .hanzi-write .meaning-card { grid-area: definitions; }
 .hanzi-write #xh-score-panel { grid-area: score; }
 .hanzi-write .card-tools { grid-area: tools; }
@@ -216,7 +228,7 @@
   align-items: center;
   gap: 12px;
   flex: 1;
-  min-height: 0;
+  min-height: 120px;
   width: 100%;
 }
 .writer-canvas-space {
@@ -226,7 +238,7 @@
   justify-content: center;
   flex: 1;
   width: 100%;
-  min-height: 120px;
+  min-height: 0;
 }
 #character-target-div { flex: 0 0 auto; touch-action: none; cursor: crosshair; }
 #character-target-div svg { display: block; touch-action: none; }
@@ -248,7 +260,7 @@
 #onfinish-character-target-div > span { flex: 0 0 auto; }
 #onfinish-character-target-div svg { display: block; }
 .writer-complete .writer-canvas-space, #back .writer-canvas-space { display: none; }
-.writer-complete #xh-writer-practice-wrap, #back #xh-writer-practice-wrap { flex: 0 0 auto; }
+.writer-complete #xh-writer-practice-wrap, #back #xh-writer-practice-wrap { flex: 0 0 auto; min-height: 0; }
 
 #xh-score-panel {
   --xh-score-accent: var(--text2);
@@ -299,7 +311,7 @@
   .has-meaning.hanzi-write .writer-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "practice" "definitions" "score" "tools";
-    grid-template-rows: minmax(120px, 1fr) minmax(110px, 0.4fr) auto auto;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 0.4fr) auto auto;
   }
   .study-workspace, #xh-writer-practice-wrap { gap: 8px; }
   #char_pinyin { font-size: 24px; margin-bottom: 4px; }
@@ -312,7 +324,7 @@
   #xh-score-panel { font-size: 11px; }
 }
 
-/* Very short webviews may scroll rather than shrinking controls or clipping text. */
+/* Writer scrolls within its panes; other cards can scroll in very short webviews. */
 @media (max-height: 540px) {
-  .hanzi-card { min-height: 500px; }
+  .hanzi-card:not(.hanzi-write) { min-height: 500px; }
 }

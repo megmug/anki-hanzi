@@ -57,6 +57,9 @@
   onCleanup(function () { removalObserver.disconnect(); });
   listen(window, "pagehide", dispose);
 
+  // With AnkiMobile's insets, CSS can size the card without reading scroll-dependent geometry.
+  if (getComputedStyle(screen).getPropertyValue("--hanzi-mobile-height").trim()) return;
+
   function updateViewport() {
     if (!isActive() || document.hidden) return;
     var viewport = window.visualViewport;
@@ -109,7 +112,6 @@
   listen(document, "visibilitychange", settleViewport);
   if (window.visualViewport) {
     listen(window.visualViewport, "resize", settleViewport);
-    listen(window.visualViewport, "scroll", scheduleViewport);
   }
   updateViewport();
   settleViewport();

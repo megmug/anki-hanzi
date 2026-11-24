@@ -88,9 +88,13 @@ disposing them when Anki replaces the card or leaves the reviewer. The Writer ad
 practice writers or thumbnails are replaced. It adapts private hooks of the pinned
 Hanzi Writer 3.7.3, which has no public disposal API; recheck these hooks on library upgrades.
 
-Card height follows the visible viewport, including a top offset from the reviewer. Changes
-to the viewport or loaded fonts update this height without waiting for a scroll. On card
-display, viewport resize, and return from the background, five extra measurements over two
-seconds catch delayed webview layout changes even without a resize event. Unchanged heights
-do not rewrite the layout, and card disposal cancels pending measurements. There is no
-continuous polling. Pinch zoom does not trigger a layout resize.
+On AnkiMobile, card height subtracts the native reviewer toolbar insets from the full
+viewport. It follows orientation and inset changes through CSS, independently of scroll
+position. On small viewports the Writer's practice and definitions panes can scroll
+independently, leaving the score and controls visible.
+
+Without native insets, card height uses the visual viewport and the reviewer's top offset.
+On display, resize, and return from the background, five extra measurements over two seconds
+catch delayed webview layout changes. Unchanged heights do not rewrite the layout. Card
+disposal cancels pending measurements. Scroll and pinch zoom do not trigger measurements
+unless the viewport reports a resize at normal scale.
